@@ -18,7 +18,7 @@ DubFlow 是一个 YouTube 视频智能配音平台。粘贴一个 YouTube 链接
 
 **AI 翻译** — 接入 MiMo 大模型，支持多语言互译，自动保持字幕的时间戳对齐。
 
-**语音合成** — 内置多种音色，支持通过自然语言描述设计自定义音色，也可以上传参考音频克隆声音。
+**语音合成** — 内置多种音色，支持通过自然语言描述设计自定义音色，也可以上传参考音频克隆声音。语音识别、翻译、合成、声音克隆、音色设计均基于 MiMo 模型。
 
 **视频导出** — 将翻译后的字幕与配音音频合成为完整视频，支持 SRT 字幕文件和音频文件分别导出。
 
@@ -69,8 +69,8 @@ MIMO_API_KEY=your_mimo_api_key
 | HeroUI v3 | 组件库 |
 | Tailwind CSS v4 | 样式系统 |
 | youtubei.js | YouTube 数据获取 |
-| MiMo API | AI 翻译 |
-| TTS API | 语音合成 |
+| ffmpeg-static | 音频提取与视频合成 |
+| MiMo API | AI 引擎（语音识别、翻译、语音合成、声音克隆、音色设计） |
 
 ## 项目结构
 
@@ -85,7 +85,9 @@ src/
 │   │   ├── asr/          # 语音识别
 │   │   ├── clone-voice/  # 声音克隆
 │   │   ├── design-voice/ # 声音设计
-│   │   └── export/       # 视频导出
+│   │   ├── extract-audio/# 音频提取 (ffmpeg)
+│   │   ├── export/       # 视频导出
+│   │   └── settings/     # 配置查询
 │   ├── layout.tsx        # 根布局
 │   ├── page.tsx          # 主页面
 │   └── globals.css       # 全局样式
@@ -94,11 +96,16 @@ src/
 │   ├── SubtitleEditor    # 字幕编辑器
 │   ├── VoiceSelector     # 音色选择器
 │   ├── ExportPanel       # 导出面板
+│   ├── FileUploader      # 文件上传
+│   ├── TextInputPanel    # 文本输入
+│   ├── TranslationInputTabs # 输入方式切换
 │   └── ...
 ├── lib/                  # 工具函数
 │   ├── youtube.ts        # YouTube API 封装
-│   ├── mimo.ts           # MiMo 翻译封装
+│   ├── mimo.ts           # MiMo API 封装（ASR/翻译/TTS/克隆/设计）
 │   ├── subtitle.ts       # 字幕解析
+│   ├── audio-processing.ts # 音频处理
+│   ├── api-key-storage.ts  # API Key 本地存储
 │   └── translation-providers.ts
 └── types/                # TypeScript 类型
 ```
