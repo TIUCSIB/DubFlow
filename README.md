@@ -31,34 +31,26 @@ DubFlow 是一个 YouTube 视频智能配音平台。粘贴一个 YouTube 链接
 - Node.js 18+
 - npm / pnpm / yarn
 
-### 安装
+### 安装与启动
 
 ```bash
 git clone https://github.com/TIUCSIB/DubFlow.git
 cd DubFlow
 npm install
-```
-
-### 配置
-
-复制环境变量模板并填入你的 API Key：
-
-```bash
-cp .env.example .env.local
-```
-
-```env
-MIMO_API_KEY=your_mimo_api_key
-MIMO_BASE_URL=https://api.mimo.com/v1
-```
-
-### 启动
-
-```bash
 npm run dev
 ```
 
 打开浏览器访问 [http://localhost:3000](http://localhost:3000)。
+
+### 配置 API Key
+
+API Key 在应用内的设置面板中配置，支持创建多个配置方案并随时切换，数据存储在浏览器本地。
+
+也可以选择在项目根目录创建 `.env.local` 文件，将 `MIMO_API_KEY` 作为默认的 fallback：
+
+```env
+MIMO_API_KEY=your_mimo_api_key
+```
 
 ## 使用流程
 
@@ -117,30 +109,12 @@ src/
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/TIUCSIB/DubFlow)
 
-### Docker
-
-```bash
-docker build -t dubflow .
-docker run -p 3000:3000 dubflow
-```
-
 ### 手动部署
 
 ```bash
 npm run build
 npm run start
 ```
-
-## 环境变量
-
-| 变量名 | 说明 | 必填 |
-|--------|------|------|
-| `MIMO_API_KEY` | MiMo API 密钥 | 是 |
-| `MIMO_BASE_URL` | MiMo API 地址 | 是 |
-| `TTS_API_KEY` | TTS 语音合成密钥 | 否 |
-| `ASR_API_KEY` | 语音识别密钥 | 否 |
-
-> 所有 API Key 也可以在应用内的设置面板中配置，支持多方案切换。
 
 ## 许可证
 
