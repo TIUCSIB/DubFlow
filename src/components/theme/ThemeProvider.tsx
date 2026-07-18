@@ -7,11 +7,13 @@ type Theme = "dark" | "light";
 interface ThemeContextType {
   theme: Theme;
   toggleTheme: () => void;
+  isReady: boolean;
 }
 
 const ThemeContext = createContext<ThemeContextType>({
   theme: "dark",
   toggleTheme: () => {},
+  isReady: false,
 });
 
 export function useTheme() {
@@ -20,15 +22,22 @@ export function useTheme() {
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>("dark");
-  const [mounted, setMounted] = useState(false);
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
     const saved = localStorage.getItem("dubflow-theme") as Theme | null;
-    const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const initial = saved ?? (systemPrefersDark ? "dark" : "light");
-    setTheme(initial);
-    document.documentElement.classList.toggle("dark", initial === "dark");
+
+    if (!saved) {
+      const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const initial = systemPrefersDark ? "dark" : "light";
+      setTheme(initial);
+      document.documentElement.classList.toggle("dark", initial === "dark");
+    } else {
+      setTheme(saved);
+      document.documentElement.classList.toggle("dark", saved === "dark");
+    }
+    document.documentElement.setAttribute("data-theme-ready", "true");
+    setIsReady(true);
   }, []);
 
   const toggleTheme = useCallback(() => {
@@ -40,12 +49,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  if (!mounted) {
-    return <>{children}</>;
-  }
-
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme, toggleTheme, isReady }}>
       {children}
     </ThemeContext.Provider>
   );

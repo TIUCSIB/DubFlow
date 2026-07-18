@@ -1,486 +1,277 @@
-"use client";
+﻿'use client'
 
-import { useState, useCallback, useRef } from "react";
-import type {
-  SubtitleEntry,
-  TranslatedEntry,
-  VoiceMode,
-} from "@/types";
-import Header from "@/components/Header";
-import SubtitleEditor from "@/components/SubtitleEditor";
-import VoiceSelector from "@/components/VoiceSelector";
-import PipelineProgress from "@/components/PipelineProgress";
-import {
-  Link,
-  FileText,
-  Type,
-  Play,
-  Pause,
-  Download,
-  Volume2,
-  Sparkles,
-} from "lucide-react";
-import {
-  Button,
-  Input,
-  TextArea,
-  Spinner,
-} from "@heroui/react";
+import { useCallback, useState } from 'react'
+import { Sparkles } from 'lucide-react'
+import { Card } from '@heroui/react'
+import type { ExportProgress, SubtitleEntry, TranslatedEntry, VoiceMode } from '@/types'
+import AudioPreview from '@/components/AudioPreview'
+import AudioResultPanel, { type AudioResultView } from '@/components/AudioResultPanel'
+import ExportPanel, { DownloadLinks } from '@/components/ExportPanel'
+import Header from '@/components/Header'
+import SubtitleEditor from '@/components/SubtitleEditor'
+import TextInputPanel from '@/components/TextInputPanel'
+import TranslationInputTabs from '@/components/TranslationInputTabs'
+import VoiceSelector from '@/components/VoiceSelector'
+import { getApiKeyHeaders } from '@/lib/api-key-storage'
 
-/* ------------------------------------------------------------------ */
-/*  Pipeline 配置                                                       */
-/* ------------------------------------------------------------------ */
+type InputMode = 'text' | 'file' | 'srt' | 'youtube'
 
-const PIPELINE_STEPS = [
-  { key: "download", label: "下载视频" },
-  { key: "translate", label: "翻译字幕" },
-  { key: "clone", label: "声音克隆" },
-  { key: "synthesize", label: "语音合成" },
-] as const;
+interface ExportResult {
+  srtContent: string
+  audioSegments: { index: number; base64: string; duration: number }[]
+}
 
-type StepStatus = "pending" | "active" | "done" | "error";
-
-/* ------------------------------------------------------------------ */
-/*  主页面                                                              */
-/* ------------------------------------------------------------------ */
+interface ExportProgressEvent {
+  type: 'progress' | 'complete' | 'error'
+  phase?: 'synthesizing'
+  current?: number
+  total?: number
+  error?: string
+  srtContent?: string
+  audioSegments?: ExportResult['audioSegments']
+}
 
 export default function Home() {
-  // ---- 输入模式 ----
-  const [inputMode, setInputMode] = useState<"url" | "text" | null>(null);
+  const [inputMode, setInputMode] = useState<InputMode>('file')
+  const [audioResultView, setAudioResultView] = useState<AudioResultView>('recognized')
+  const [pageError, setPageError] = useState<string | null>(null)
+  const [originalEntries, setOriginalEntries] = useState<SubtitleEntry[]>([])
+  const [translatedEntries, setTranslatedEntries] = useState<TranslatedEntry[]>([])
+  const [voiceMode, setVoiceMode] = useState<VoiceMode>('builtin')
+  const [builtinVoice, setBuiltinVoice] = useState('mimo_default')
+  const [voiceDescription, setVoiceDescription] = useState('')
+  const [referenceAudioFile, setReferenceAudioFile] = useState<File | null>(null)
+  const [textInput, setTextInput] = useState('')
+  const [audioBase64, setAudioBase64] = useState<string | null>(null)
+  const [previewingIndex, setPreviewingIndex] = useState<number | null>(null)
+  const [isGeneratingText, setIsGeneratingText] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
+  const [isExportingSrt, setIsExportingSrt] = useState(false)
+  const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null)
+  const [exportAudioUrl, setExportAudioUrl] = useState<string | null>(null)
+  const [exportSrtUrl, setExportSrtUrl] = useState<string | null>(null)
 
-  // ---- URL 模式 ----
-  const [youtubeUrl, setYoutubeUrl] = useState("");
-  const [isUrlSubmitting, setIsUrlSubmitting] = useState(false);
+  const handleInputModeChange = useCallback((mode: InputMode) => {
+    setInputMode(mode)
+    setAudioResultView('recognized')
+    setOriginalEntries([])
+    setTranslatedEntries([])
+    setAudioBase64(null)
+    clearObjectUrl(setExportAudioUrl)
+    clearObjectUrl(setExportSrtUrl)
+    setExportProgress(null)
+    setIsExportingSrt(false)
+    setPageError(null)
+  }, [])
 
-  // ---- Pipeline 状态 ----
-  const [pipelineJobId, setPipelineJobId] = useState<string | null>(null);
-  const [pipelineStatus, setPipelineStatus] = useState("");
-  const [pipelineProgress, setPipelineProgress] = useState(0);
-  const [pipelineStepStatuses, setPipelineStepStatuses] = useState<
-    StepStatus[]
-  >(["pending", "pending", "pending", "pending"]);
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const synthesizeText = useCallback(
+    async (text: string) => {
+      const referenceAudio = referenceAudioFile ? await fileToBase64(referenceAudioFile) : undefined
 
-  // ---- 文本模式 ----
-  const [inputText, setInputText] = useState("");
-  const [isTranslating, setIsTranslating] = useState(false);
+      const response = await fetch('/api/tts', {
+        method: 'POST',
+        headers: getApiKeyHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          text,
+          voiceMode,
+          builtinVoice: voiceMode === 'builtin' ? builtinVoice : undefined,
+          referenceAudio,
+          referenceAudioFormat: getReferenceAudioFormat(referenceAudioFile),
+          voiceDescription: voiceMode === 'design' ? voiceDescription : undefined,
+          outputFormat: 'mp3',
+        }),
+      })
 
-  // ---- 字幕 / 翻译 ----
-  const [originalEntries, setOriginalEntries] = useState<SubtitleEntry[]>([]);
-  const [translatedEntries, setTranslatedEntries] = useState<
-    TranslatedEntry[]
-  >([]);
+      if (!response.ok) {
+        const data = await response.json().catch(() => null)
+        throw new Error(data?.error || '语音合成失败')
+      }
 
-  // ---- 音色配置 ----
-  const [voiceMode, setVoiceMode] = useState<VoiceMode>("builtin");
-  const [builtinVoice, setBuiltinVoice] = useState("Chloe");
-  const [voiceDescription, setVoiceDescription] = useState("");
-  const [referenceAudioFile, setReferenceAudioFile] = useState<File | null>(
-    null,
-  );
+      const data = await response.json()
+      return data.audioBase64 as string
+    },
+    [builtinVoice, referenceAudioFile, voiceDescription, voiceMode],
+  )
 
-  // ---- 生成 ----
-  const [isGenerating, setIsGenerating] = useState(false);
+  const handleGenerateText = useCallback(
+    async (text: string) => {
+      setIsGeneratingText(true)
+      setPageError(null)
+      setAudioBase64(null)
 
-  // ---- 音频播放 ----
-  const [audioBase64, setAudioBase64] = useState<string | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+      try {
+        const generatedAudio = await synthesizeText(text)
+        const entry: SubtitleEntry = {
+          index: 1,
+          startTime: '00:00:00,000',
+          endTime: '00:00:00,000',
+          text,
+          startMs: 0,
+          endMs: 0,
+        }
 
-  /* -------------------------------------------------------------- */
-  /*  辅助函数                                                        */
-  /* -------------------------------------------------------------- */
+        setOriginalEntries([entry])
+        setTranslatedEntries([{ ...entry, translatedText: text }])
+        setAudioBase64(generatedAudio)
+      } catch (error: unknown) {
+        setPageError(error instanceof Error ? error.message : '语音合成失败')
+      } finally {
+        setIsGeneratingText(false)
+      }
+    },
+    [synthesizeText],
+  )
 
-  const getAudioSrc = useCallback(
-    (b64: string) => `data:audio/mpeg;base64,${b64}`,
-    [],
-  );
+  const handlePreviewTranslation = useCallback(
+    async (index: number) => {
+      const entry = translatedEntries[index]
+      if (!entry?.translatedText.trim()) {
+        setPageError('请先填写译文')
+        return
+      }
 
-  const togglePlayPause = useCallback(() => {
-    if (!audioRef.current) return;
-    if (isPlaying) {
-      audioRef.current.pause();
-    } else {
-      audioRef.current.play();
-    }
-    setIsPlaying(!isPlaying);
-  }, [isPlaying]);
+      setPreviewingIndex(index)
+      setPageError(null)
+      setAudioBase64(null)
+
+      try {
+        setAudioBase64(await synthesizeText(entry.translatedText))
+      } catch (error: unknown) {
+        setPageError(error instanceof Error ? error.message : '语音合成失败')
+      } finally {
+        setPreviewingIndex(null)
+      }
+    },
+    [synthesizeText, translatedEntries],
+  )
+
+  const handleUpdateTranslation = useCallback((index: number, text: string) => {
+    setTranslatedEntries((previous) => previous.map((entry, entryIndex) => (entryIndex === index ? { ...entry, translatedText: text } : entry)))
+    setAudioBase64(null)
+  }, [])
 
   const handleDownload = useCallback(() => {
-    if (!audioBase64) return;
-    const a = document.createElement("a");
-    a.href = `data:audio/mpeg;base64,${audioBase64}`;
-    a.download = `dubflow-output.mp3`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  }, [audioBase64]);
+    if (!audioBase64) return
 
-  /* -------------------------------------------------------------- */
-  /*  Pipeline 轮询                                                   */
-  /* -------------------------------------------------------------- */
+    downloadBlob(new Blob([decodeBase64(audioBase64)], { type: 'audio/mpeg' }), 'dubflow-output.mp3')
+  }, [audioBase64])
 
-  const startPolling = useCallback((jobId: string) => {
-    if (pollingRef.current) clearInterval(pollingRef.current);
+  const handleExport = useCallback(
+    async (options: { srtBilingual: boolean; withAudio: boolean }) => {
+      if (translatedEntries.length === 0) return
 
-    pollingRef.current = setInterval(async () => {
+      if (options.withAudio) {
+        setIsExporting(true)
+      } else {
+        setIsExportingSrt(true)
+      }
+      setExportProgress(
+        options.withAudio ?
+          {
+            phase: 'synthesizing',
+            current: 0,
+            total: translatedEntries.length,
+          }
+        : null,
+      )
+      clearObjectUrl(setExportAudioUrl)
+      clearObjectUrl(setExportSrtUrl)
+      setPageError(null)
+
       try {
-        const res = await fetch(`/api/pipeline/${jobId}`);
-        if (!res.ok) return;
-        const data = await res.json();
+        const referenceAudio = options.withAudio && voiceMode === 'clone' && referenceAudioFile ? await fileToBase64(referenceAudioFile) : undefined
+        const response = await fetch('/api/export', {
+          method: 'POST',
+          headers: getApiKeyHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({
+            entries: translatedEntries,
+            voiceMode,
+            builtinVoice: voiceMode === 'builtin' ? builtinVoice : undefined,
+            referenceAudio,
+            referenceAudioFormat: getReferenceAudioFormat(referenceAudioFile),
+            voiceDescription: voiceMode === 'design' ? voiceDescription : undefined,
+            outputFormat: 'mp3',
+            srtBilingual: options.srtBilingual,
+            withAudio: options.withAudio,
+            streamProgress: options.withAudio,
+          }),
+        })
 
-        setPipelineProgress(data.progress ?? 0);
-        setPipelineStatus(data.status ?? "");
-
-        // 映射步骤状态
-        const statuses: StepStatus[] = ["pending", "pending", "pending", "pending"];
-        const stepMap: Record<string, number> = {
-          downloading: 0,
-          translating: 1,
-          cloning: 2,
-          synthesizing: 3,
-        };
-
-        if (data.status && stepMap[data.status] !== undefined) {
-          statuses[stepMap[data.status]] = "active";
-          for (let i = 0; i < stepMap[data.status]; i++) {
-            statuses[i] = "done";
-          }
-        }
-        if (data.status === "completed") {
-          statuses.fill("done");
-        }
-        if (data.status === "error") {
-          for (let i = statuses.length - 1; i >= 0; i--) {
-            if (statuses[i] === "active") {
-              statuses[i] = "error";
-              break;
-            }
-          }
+        if (!response.ok) {
+          const data = await response.json().catch(() => null)
+          throw new Error(data?.error || '导出失败')
         }
 
-        setPipelineStepStatuses(statuses);
+        const data = options.withAudio ? await readExportStream(response, setExportProgress) : ((await response.json()) as ExportResult)
 
-        if (data.status === "completed") {
-          if (pollingRef.current) clearInterval(pollingRef.current);
-          if (data.英文字幕 && data.translatedSubtitles) {
-            setOriginalEntries(data.英文字幕);
-            setTranslatedEntries(data.translatedSubtitles);
-          }
+        if (!data.srtContent) {
+          throw new Error('导出结果缺少字幕内容')
         }
 
-        if (data.status === "error") {
-          if (pollingRef.current) clearInterval(pollingRef.current);
+        setExportSrtUrl(
+          URL.createObjectURL(
+            new Blob([data.srtContent], {
+              type: 'text/plain;charset=utf-8',
+            }),
+          ),
+        )
+
+        if (options.withAudio && data.audioSegments.length > 0) {
+          setExportProgress({
+            phase: 'merging',
+            current: data.audioSegments.length,
+            total: data.audioSegments.length,
+          })
+          const audioBlob = await mergeAudioSegments(data.audioSegments)
+          setExportAudioUrl(URL.createObjectURL(audioBlob))
         }
-      } catch {
-        // 轮询失败时静默处理
+      } catch (error: unknown) {
+        setPageError(error instanceof Error ? error.message : '导出失败')
+      } finally {
+        setIsExporting(false)
+        setIsExportingSrt(false)
+        setExportProgress(null)
       }
-    }, 2000);
-  }, []);
-
-  /* -------------------------------------------------------------- */
-  /*  URL 提交                                                        */
-  /* -------------------------------------------------------------- */
-
-  const handleUrlSubmit = useCallback(async () => {
-    if (!youtubeUrl.trim()) return;
-    setIsUrlSubmitting(true);
-
-    try {
-      const res = await fetch("/api/pipeline", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ youtubeUrl: youtubeUrl.trim() }),
-      });
-
-      if (!res.ok) throw new Error("创建任务失败");
-
-      const data = await res.json();
-      setPipelineJobId(data.jobId);
-      setPipelineStepStatuses(["active", "pending", "pending", "pending"]);
-      setPipelineProgress(0);
-      startPolling(data.jobId);
-    } catch (err) {
-      console.error(err);
-      setPipelineStatus("任务启动失败，请检查 URL 后重试");
-    } finally {
-      setIsUrlSubmitting(false);
-    }
-  }, [youtubeUrl, startPolling]);
-
-  /* -------------------------------------------------------------- */
-  /*  文本翻译                                                        */
-  /* -------------------------------------------------------------- */
-
-  const handleTranslate = useCallback(async () => {
-    if (!inputText.trim()) return;
-    setIsTranslating(true);
-
-    try {
-      const res = await fetch("/api/translate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: inputText.trim() }),
-      });
-
-      if (!res.ok) throw new Error("翻译失败");
-
-      const data = await res.json();
-
-      const sentences = inputText
-        .split(/(?<=[。！？.!?])\s*/)
-        .filter((s) => s.trim());
-      const translatedParts = data.translatedText
-        .split(/(?<=[。！？.!?])\s*/)
-        .filter((s: string) => s.trim());
-
-      const orig: SubtitleEntry[] = sentences.map((text, i) => ({
-        index: i,
-        startTime: "",
-        endTime: "",
-        text,
-        startMs: i * 5000,
-        endMs: (i + 1) * 5000,
-      }));
-
-      const trans: TranslatedEntry[] = orig.map((entry, i) => ({
-        ...entry,
-        translatedText: translatedParts[i] ?? "",
-      }));
-
-      setOriginalEntries(orig);
-      setTranslatedEntries(trans);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsTranslating(false);
-    }
-  }, [inputText]);
-
-  /* -------------------------------------------------------------- */
-  /*  更新单条翻译                                                     */
-  /* -------------------------------------------------------------- */
-
-  const handleUpdateTranslation = useCallback(
-    (index: number, text: string) => {
-      setTranslatedEntries((prev) =>
-        prev.map((e, i) => (i === index ? { ...e, translatedText: text } : e)),
-      );
     },
-    [],
-  );
+    [builtinVoice, referenceAudioFile, translatedEntries, voiceDescription, voiceMode],
+  )
 
-  /* -------------------------------------------------------------- */
-  /*  生成配音                                                        */
-  /* -------------------------------------------------------------- */
-
-  const handleGenerate = useCallback(async () => {
-    const textToSpeak = translatedEntries
-      .map((e) => e.translatedText)
-      .filter(Boolean)
-      .join("\n");
-
-    if (!textToSpeak.trim()) return;
-    setIsGenerating(true);
-    setAudioBase64(null);
-    setIsPlaying(false);
-
-    try {
-      const body: Record<string, unknown> = {
-        text: textToSpeak,
-        voiceMode,
-      };
-
-      if (voiceMode === "builtin") {
-        body.builtinVoice = builtinVoice;
-      } else if (voiceMode === "clone" && referenceAudioFile) {
-        const reader = new FileReader();
-        const base64 = await new Promise<string>((resolve) => {
-          reader.onload = () => {
-            const result = reader.result as string;
-            resolve(result.split(",")[1] ?? "");
-          };
-          reader.readAsDataURL(referenceAudioFile);
-        });
-        body.referenceAudio = base64;
-        body.referenceAudioFormat = referenceAudioFile.name.endsWith(".wav")
-          ? "wav"
-          : "mp3";
-      } else if (voiceMode === "design") {
-        body.voiceDescription = voiceDescription;
-      }
-
-      const res = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      if (!res.ok) throw new Error("语音合成失败");
-
-      const data = await res.json();
-      setAudioBase64(data.audioBase64);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsGenerating(false);
-    }
-  }, [
-    translatedEntries,
-    voiceMode,
-    builtinVoice,
-    referenceAudioFile,
-    voiceDescription,
-  ]);
-
-  /* -------------------------------------------------------------- */
-  /*  渲染                                                             */
-  /* -------------------------------------------------------------- */
+  const showVoiceSelector = inputMode === 'text' || translatedEntries.length > 0
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex min-h-full flex-col">
       <Header />
 
-      <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-4 py-8 sm:px-6">
-        {/* ============================================================ */}
-        {/* Section 1 — URL 输入 / 方式选择                                 */}
-        {/* ============================================================ */}
-        {inputMode === null && (
-          <section className="flex flex-col items-center gap-6 py-16">
-            <h2 className="text-2xl font-bold dark:text-white text-gray-900">
-              粘贴 YouTube 链接，开始智能配音
-            </h2>
-            <p className="max-w-md text-center text-sm dark:text-gray-400 text-gray-500">
-              自动下载视频、提取字幕、翻译成中文、用你选择的音色生成配音
-            </p>
+      <main className="mx-auto w-full max-w-4xl flex-1 space-y-6 px-6 py-8">
+        <TranslationInputTabs
+          inputMode={inputMode}
+          originalEntries={originalEntries}
+          translatedEntries={translatedEntries}
+          onInputModeChange={handleInputModeChange}
+          onOriginalEntriesChange={setOriginalEntries}
+          onTranslatedEntriesChange={setTranslatedEntries}
+          onError={setPageError}
+        />
 
-            {/* URL 输入 */}
-            <div className="flex w-full max-w-lg items-center gap-2">
-              <div className="relative flex-1">
-                <Link className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
-                <Input
-                  type="url"
-                  value={youtubeUrl}
-                  onChange={(e) => setYoutubeUrl(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleUrlSubmit()}
-                  placeholder="https://www.youtube.com/watch?v=..."
-                  className="pl-10"
-                  fullWidth
-                />
-              </div>
-              <Button
-                variant="primary"
-                onPress={handleUrlSubmit}
-                isDisabled={isUrlSubmitting || !youtubeUrl.trim()}
-                isPending={isUrlSubmitting}
-              >
-                <Sparkles className="h-4 w-4" />
-                开始处理
-              </Button>
-            </div>
+        {pageError && <p className="text-sm text-red-400">{pageError}</p>}
 
-            {/* 分割线 */}
-            <div className="flex w-full max-w-lg items-center gap-3">
-              <div className="h-px flex-1 dark:bg-gray-800 bg-gray-300" />
-              <span className="text-xs dark:text-gray-600 text-gray-400">或者</span>
-              <div className="h-px flex-1 dark:bg-gray-800 bg-gray-300" />
+        {inputMode !== 'text' && !pageError && translatedEntries.length === 0 && (
+          <Card className="fade-in-up flex flex-col items-center gap-3 border-dashed px-6 py-10 text-center">
+            <Sparkles className="h-8 w-8 text-teal-400" />
+            <div>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                {'\u4e0a\u4f20\u97f3\u9891\u3001\u89c6\u9891\u6216\u5b57\u5e55\u6587\u4ef6\uff0c\u5f00\u59cb\u667a\u80fd\u914d\u97f3\u6d41\u7a0b'}
+              </p>
+              <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">{'\u652f\u6301\u8bed\u97f3\u8bc6\u522b \u2192 \u81ea\u52a8\u7ffb\u8bd1 \u2192 \u914d\u97f3\u5408\u6210'}</p>
             </div>
-
-            {/* 其他入口按钮 */}
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                onPress={() => setInputMode("text")}
-              >
-                <Type className="h-4 w-4" />
-                直接输入文字
-              </Button>
-              <Button
-                variant="outline"
-                onPress={() => setInputMode("text")}
-              >
-                <FileText className="h-4 w-4" />
-                上传字幕文件
-              </Button>
-            </div>
-          </section>
+          </Card>
         )}
 
-        {/* ============================================================ */}
-        {/* Section 2 — 内容区域：Pipeline 进度 / 文本输入                    */}
-        {/* ============================================================ */}
-        {inputMode === "url" && pipelineJobId && (
-          <PipelineProgress
-            status={pipelineStatus}
-            progress={pipelineProgress}
-            steps={PIPELINE_STEPS.map((s, i) => ({
-              key: s.key,
-              label: s.label,
-              status: pipelineStepStatuses[i],
-            }))}
-          />
+        {inputMode === 'file' && translatedEntries.length > 0 && (
+          <AudioResultPanel entries={originalEntries} translatedEntries={translatedEntries} selectedView={audioResultView} onViewChange={setAudioResultView} />
         )}
 
-        {inputMode === "text" && (
-          <section className="rounded-xl border dark:border-gray-800 border-gray-200 dark:bg-gray-900 bg-white p-5">
-            <h2 className="mb-3 text-sm font-semibold dark:text-gray-200 text-gray-800">
-              输入需要翻译的文字
-            </h2>
-            <TextArea
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              placeholder="在这里粘贴或输入需要翻译成中文的英文文本..."
-              rows={5}
-              fullWidth
-              variant="secondary"
-            />
-            <div className="mt-3 flex items-center justify-between">
-              <span className="text-xs text-gray-600">
-                {inputText.length} 字符
-              </span>
-              <div className="flex gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onPress={() => {
-                    setInputMode(null);
-                    setInputText("");
-                  }}
-                >
-                  返回
-                </Button>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onPress={handleTranslate}
-                  isDisabled={isTranslating || !inputText.trim()}
-                  isPending={isTranslating}
-                >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  翻译
-                </Button>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* ============================================================ */}
-        {/* Section 3 — 字幕编辑器                                         */}
-        {/* ============================================================ */}
-        {translatedEntries.length > 0 && (
-          <SubtitleEditor
-            entries={originalEntries}
-            translatedEntries={translatedEntries}
-            onUpdateTranslation={handleUpdateTranslation}
-          />
-        )}
-
-        {/* ============================================================ */}
-        {/* Section 4 — 音色选择器                                         */}
-        {/* ============================================================ */}
-        {translatedEntries.length > 0 && (
+        {inputMode === 'text' && (
           <VoiceSelector
             voiceMode={voiceMode}
             onChange={setVoiceMode}
@@ -493,130 +284,216 @@ export default function Home() {
           />
         )}
 
-        {/* ============================================================ */}
-        {/* Section 5 — 生成配音按钮                                       */}
-        {/* ============================================================ */}
-        {translatedEntries.length > 0 && (
-          <Button
-            variant="primary"
-            size="lg"
-            fullWidth
-            onPress={handleGenerate}
-            isDisabled={
-              isGenerating ||
-              translatedEntries.every((e) => !e.translatedText.trim())
-            }
-            isPending={isGenerating}
-            className="bg-gradient-to-r from-indigo-600 to-purple-600 shadow-xl shadow-indigo-500/25 hover:from-indigo-500 hover:to-purple-500"
-          >
-            <Volume2 className="h-4 w-4" />
-            生成配音
-          </Button>
+        {inputMode === 'text' && (
+          <TextInputPanel
+            value={textInput}
+            onChange={setTextInput}
+            onGenerate={async () => {
+              const text = textInput.trim()
+              if (!text) return
+
+              setPageError(null)
+              await handleGenerateText(text)
+            }}
+            isGenerating={isGeneratingText}
+          />
         )}
 
-        {/* ============================================================ */}
-        {/* Section 6 — 音频播放器                                         */}
-        {/* ============================================================ */}
-        {audioBase64 && (
-          <section className="rounded-xl border dark:border-gray-800 border-gray-200 dark:bg-gray-900 bg-white p-5">
-            <h2 className="mb-4 text-sm font-semibold dark:text-gray-200 text-gray-800">
-              配音预览
-            </h2>
-
-            {/* 隐藏的 audio 元素 */}
-            <audio
-              ref={audioRef}
-              src={getAudioSrc(audioBase64)}
-              onTimeUpdate={() => {
-                if (audioRef.current) {
-                  setCurrentTime(audioRef.current.currentTime);
-                }
-              }}
-              onLoadedMetadata={() => {
-                if (audioRef.current) {
-                  setDuration(audioRef.current.duration);
-                }
-              }}
-              onEnded={() => setIsPlaying(false)}
-            />
-
-            {/* 播放器 UI */}
-            <div className="flex items-center gap-4">
-              {/* 播放/暂停按钮 */}
-              <Button
-                variant="primary"
-                isIconOnly
-                onPress={togglePlayPause}
-                className="rounded-full"
-              >
-                {isPlaying ? (
-                  <Pause className="h-4 w-4" />
-                ) : (
-                  <Play className="ml-0.5 h-4 w-4" />
-                )}
-              </Button>
-
-              {/* 进度条 */}
-              <div className="flex flex-1 flex-col gap-1">
-                <div
-                  className="h-1.5 w-full cursor-pointer overflow-hidden rounded-full dark:bg-gray-800 bg-gray-200"
-                  onClick={(e) => {
-                    if (!audioRef.current) return;
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    const ratio =
-                      (e.clientX - rect.left) / rect.width;
-                    audioRef.current.currentTime =
-                      ratio * audioRef.current.duration;
-                  }}
-                >
-                  <div
-                    className="progress-gradient h-full rounded-full transition-all duration-75"
-                    style={{
-                      width: duration
-                        ? `${(currentTime / duration) * 100}%`
-                        : "0%",
-                    }}
-                  />
-                </div>
-                <div className="flex justify-between text-[10px] text-gray-500">
-                  <span>{formatSeconds(currentTime)}</span>
-                  <span>{formatSeconds(duration)}</span>
-                </div>
-              </div>
-
-              {/* 下载按钮 */}
-              <Button
-                variant="outline"
-                isIconOnly
-                onPress={handleDownload}
-                className="rounded-full"
-                aria-label="下载配音文件"
-              >
-                <Download className="h-4 w-4" />
-              </Button>
-            </div>
-          </section>
+        {inputMode !== 'text' && showVoiceSelector && (
+          <VoiceSelector
+            voiceMode={voiceMode}
+            onChange={setVoiceMode}
+            builtinVoice={builtinVoice}
+            onBuiltinVoiceChange={setBuiltinVoice}
+            voiceDescription={voiceDescription}
+            onVoiceDescriptionChange={setVoiceDescription}
+            referenceAudioFile={referenceAudioFile}
+            onReferenceAudioChange={setReferenceAudioFile}
+          />
         )}
 
-        {/* 底部留白 */}
+        {inputMode !== 'text' && translatedEntries.length > 0 && (inputMode === 'srt' || inputMode === 'youtube' || audioResultView === 'bilingual') && (
+          <SubtitleEditor
+            entries={originalEntries}
+            translatedEntries={translatedEntries}
+            onUpdateTranslation={handleUpdateTranslation}
+            onPreviewTranslation={handlePreviewTranslation}
+            previewingIndex={previewingIndex}
+          />
+        )}
+
+        {inputMode !== 'text' && translatedEntries.length > 0 && (
+          <>
+            <ExportPanel hasEntries onExport={handleExport} isExporting={isExporting} isExportingSrt={isExportingSrt} exportProgress={exportProgress} />
+            <DownloadLinks audioDownloadUrl={exportAudioUrl} srtDownloadUrl={exportSrtUrl} audioFilename="dubflow-audio.wav" srtFilename="dubflow-subtitles.srt" />
+          </>
+        )}
+
+        {audioBase64 && <AudioPreview audioBase64={audioBase64} onDownload={handleDownload} />}
+
         <div className="h-8" />
       </main>
-
-      {/* 页脚 */}
-      <footer className="border-t dark:border-gray-800 border-gray-200 py-4 text-center text-xs dark:text-gray-600 text-gray-400">
-        DubFlow · YouTube 视频智能配音
-      </footer>
     </div>
-  );
+  )
 }
 
-/* ------------------------------------------------------------------ */
-/*  辅助工具函数                                                        */
-/* ------------------------------------------------------------------ */
+async function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result as string
+      resolve(result.split(',')[1] || '')
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
 
-function formatSeconds(sec: number): string {
-  if (!isFinite(sec)) return "0:00";
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
-  return `${m}:${String(s).padStart(2, "0")}`;
+function getReferenceAudioFormat(file: File | null): 'mp3' | 'wav' {
+  return file?.name.toLowerCase().endsWith('.wav') ? 'wav' : 'mp3'
+}
+
+async function readExportStream(response: Response, onProgress: (progress: ExportProgress) => void): Promise<ExportResult> {
+  if (!response.body) {
+    throw new Error('导出服务没有返回进度流')
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let result: ExportResult | null = null
+
+  const handleLine = (line: string) => {
+    if (!line.trim()) return
+
+    const event = JSON.parse(line) as ExportProgressEvent
+    if (event.type === 'error') {
+      throw new Error(event.error || '配音合成失败')
+    }
+    if (event.type === 'progress') {
+      onProgress({
+        phase: 'synthesizing',
+        current: event.current ?? 0,
+        total: event.total ?? 0,
+      })
+    }
+    if (event.type === 'complete') {
+      result = {
+        srtContent: event.srtContent || '',
+        audioSegments: event.audioSegments || [],
+      }
+    }
+  }
+
+  while (true) {
+    const { done, value } = await reader.read()
+    buffer += decoder.decode(value, { stream: !done })
+    const lines = buffer.split(/\r?\n/)
+    buffer = lines.pop() || ''
+    lines.forEach(handleLine)
+    if (done) break
+  }
+
+  if (buffer.trim()) handleLine(buffer)
+  if (!result) throw new Error('导出服务没有返回完整结果')
+  return result
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
+}
+
+function clearObjectUrl(setter: React.Dispatch<React.SetStateAction<string | null>>) {
+  setter((url) => {
+    if (url) URL.revokeObjectURL(url)
+    return null
+  })
+}
+
+function decodeBase64(base64: string): ArrayBuffer {
+  const binary = atob(base64)
+  const buffer = new ArrayBuffer(binary.length)
+  const bytes = new Uint8Array(buffer)
+
+  for (let index = 0; index < binary.length; index++) {
+    bytes[index] = binary.charCodeAt(index)
+  }
+
+  return buffer
+}
+
+async function mergeAudioSegments(segments: { base64: string }[]): Promise<Blob> {
+  const audioContext = new window.AudioContext()
+
+  try {
+    const buffers = await Promise.all(segments.map(({ base64 }) => audioContext.decodeAudioData(decodeBase64(base64))))
+
+    if (buffers.length === 0) {
+      throw new Error('没有可用的音频片段')
+    }
+
+    const channelCount = Math.max(...buffers.map((buffer) => buffer.numberOfChannels))
+    const sampleRate = Math.max(...buffers.map((buffer) => buffer.sampleRate))
+    const totalLength = buffers.reduce((length, buffer) => length + buffer.length, 0)
+    const mergedBuffer = audioContext.createBuffer(channelCount, totalLength, sampleRate)
+
+    let offset = 0
+    for (const buffer of buffers) {
+      for (let channel = 0; channel < channelCount; channel++) {
+        const sourceChannel = Math.min(channel, buffer.numberOfChannels - 1)
+        mergedBuffer.getChannelData(channel).set(buffer.getChannelData(sourceChannel), offset)
+      }
+      offset += buffer.length
+    }
+
+    return audioBufferToWav(mergedBuffer)
+  } finally {
+    await audioContext.close()
+  }
+}
+
+function audioBufferToWav(buffer: AudioBuffer): Blob {
+  const channelCount = buffer.numberOfChannels
+  const dataLength = buffer.length * channelCount * 2
+  const view = new DataView(new ArrayBuffer(44 + dataLength))
+
+  writeAscii(view, 0, 'RIFF')
+  view.setUint32(4, 36 + dataLength, true)
+  writeAscii(view, 8, 'WAVE')
+  writeAscii(view, 12, 'fmt ')
+  view.setUint32(16, 16, true)
+  view.setUint16(20, 1, true)
+  view.setUint16(22, channelCount, true)
+  view.setUint32(24, buffer.sampleRate, true)
+  view.setUint32(28, buffer.sampleRate * channelCount * 2, true)
+  view.setUint16(32, channelCount * 2, true)
+  view.setUint16(34, 16, true)
+  writeAscii(view, 36, 'data')
+  view.setUint32(40, dataLength, true)
+
+  const channels = Array.from({ length: channelCount }, (_, channel) => buffer.getChannelData(channel))
+  let offset = 44
+
+  for (let sample = 0; sample < buffer.length; sample++) {
+    for (let channel = 0; channel < channelCount; channel++) {
+      const value = Math.max(-1, Math.min(1, channels[channel][sample]))
+      view.setInt16(offset, value < 0 ? value * 0x8000 : value * 0x7fff, true)
+      offset += 2
+    }
+  }
+
+  return new Blob([view], { type: 'audio/wav' })
+}
+
+function writeAscii(view: DataView, offset: number, value: string) {
+  for (let index = 0; index < value.length; index++) {
+    view.setUint8(offset + index, value.charCodeAt(index))
+  }
 }

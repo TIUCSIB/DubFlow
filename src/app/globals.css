@@ -1,27 +1,31 @@
-@import "@heroui/styles";
+﻿@import "@heroui/styles";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
   --background: #ffffff;
   --foreground: #171717;
-  --accent: oklch(0.55 0.2 265);
+  --accent: oklch(0.60 0.15 175);
   --accent-foreground: #ffffff;
   --surface: #f9fafb;
   --surface-foreground: #171717;
   --default: #f3f4f6;
   --default-foreground: #171717;
+  --accent-subtle: oklch(0.95 0.05 175);
+  --accent-muted: oklch(0.45 0.12 175);
 }
 
 .dark {
   --background: #030712;
   --foreground: #f3f4f6;
-  --accent: oklch(0.55 0.2 265);
+  --accent: oklch(0.65 0.15 175);
   --accent-foreground: #ffffff;
   --surface: #111827;
   --surface-foreground: #f3f4f6;
   --default: #1f2937;
   --default-foreground: #f3f4f6;
+  --accent-subtle: oklch(0.20 0.06 175);
+  --accent-muted: oklch(0.55 0.12 175);
 }
 
 @theme inline {
@@ -35,6 +39,11 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* 主题切换按钮在主题初始化完成前隐藏，避免图标闪烁 */
+html:not([data-theme-ready]) .theme-toggle-btn {
+  visibility: hidden;
 }
 
 ::-webkit-scrollbar {
@@ -70,5 +79,43 @@ body {
 }
 
 .progress-gradient {
-  background: linear-gradient(90deg, #6366f1, #8b5cf6, #a855f7);
+  background: linear-gradient(90deg, #0d9488, #14b8a6, #2dd4bf);
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in-up {
+  animation: fadeInUp 0.3s ease-out both;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.shimmer-text {
+  background: linear-gradient(90deg, var(--foreground) 40%, var(--accent) 50%, var(--foreground) 60%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 3s linear infinite;
+}
+
+
+.settings-modal-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.settings-modal-scroll::-webkit-scrollbar {
+  display: none;
 }

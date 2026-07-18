@@ -8,7 +8,7 @@ import {
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
-import { ProgressBar, Spinner } from "@heroui/react";
+import { Card, ProgressBar, Spinner } from "@heroui/react";
 import clsx from "clsx";
 
 interface Step {
@@ -36,7 +36,7 @@ export default function PipelineProgress({
   steps,
 }: PipelineProgressProps) {
   return (
-    <section className="rounded-xl border dark:border-gray-800 border-gray-200 dark:bg-gray-900 bg-white p-5">
+    <Card>
       {/* 顶部进度条 */}
       <div className="mb-4">
         <ProgressBar
@@ -68,7 +68,7 @@ export default function PipelineProgress({
                     isDone &&
                       "border-emerald-500 bg-emerald-500/15 text-emerald-400",
                     isActive &&
-                      "border-indigo-500 bg-indigo-500/20 text-indigo-400 shadow-lg shadow-indigo-500/30",
+                     "border-teal-500 bg-teal-500/20 text-teal-400 shadow-lg shadow-teal-500/30",
                     isError &&
                       "border-red-500 bg-red-500/15 text-red-400",
                     isPending &&
@@ -83,7 +83,7 @@ export default function PipelineProgress({
                 <span
                   className={clsx(
                     "mt-2 text-center text-xs font-medium",
-                    isActive && "text-indigo-300",
+                    isActive && "text-teal-400",
                     isDone && "text-emerald-400",
                     isError && "text-red-400",
                     isPending && "dark:text-gray-600 text-gray-400",
@@ -102,7 +102,7 @@ export default function PipelineProgress({
                       isDone
                         ? "bg-emerald-500/60"
                         : isActive
-                          ? "bg-gradient-to-r from-indigo-500/60 to-gray-800"
+                         ? "bg-gradient-to-r from-teal-500/60 to-gray-800"
                           : "dark:bg-gray-800 bg-gray-200",
                     )}
                   />
@@ -117,6 +117,6 @@ export default function PipelineProgress({
       {status && (
         <p className="mt-4 text-center text-xs dark:text-gray-500 text-gray-400">{status}</p>
       )}
-    </section>
+    </Card>
   );
 }

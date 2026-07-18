@@ -41,3 +41,7 @@ yarn-error.log*
 next-env.d.ts
 # heroui-agents-md
 .heroui-docs/
+
+# temp / test files
+test_download.mjs
+17843*-player-script.js

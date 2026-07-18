@@ -33,23 +33,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "text 字段不能为空" }, { status: 400 });
     }
 
+    const apiKey = req.headers.get("x-mimo-api-key") || undefined;
     let audioBase64: string;
 
     switch (voiceMode) {
       case "builtin":
         audioBase64 = await synthesizeSpeech(
           text,
-          builtinVoice ?? "Chloe",
+          builtinVoice ?? "冰糖",
           styleInstruction,
-          outputFormat
+          outputFormat,
+          apiKey,
         );
         break;
-
       case "clone":
         if (!referenceAudio) {
           return NextResponse.json(
             { error: "声音克隆模式需要提供 referenceAudio" },
-            { status: 400 }
+            { status: 400 },
           );
         }
         audioBase64 = await synthesizeWithClone(
@@ -57,28 +58,28 @@ export async function POST(req: NextRequest) {
           referenceAudio,
           referenceAudioFormat ?? "mp3",
           styleInstruction,
-          outputFormat
+          outputFormat,
+          apiKey,
         );
         break;
-
       case "design":
         if (!voiceDescription) {
           return NextResponse.json(
             { error: "声音设计模式需要提供 voiceDescription" },
-            { status: 400 }
+            { status: 400 },
           );
         }
         audioBase64 = await synthesizeWithDesign(
           text,
           voiceDescription,
-          outputFormat
+          outputFormat,
+          apiKey,
         );
         break;
-
       default:
         return NextResponse.json(
           { error: `不支持的 voiceMode: ${voiceMode}` },
-          { status: 400 }
+          { status: 400 },
         );
     }
 

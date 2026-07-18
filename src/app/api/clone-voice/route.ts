@@ -15,16 +15,18 @@ export async function POST(req: NextRequest) {
     if (!text || !referenceAudio) {
       return NextResponse.json(
         { error: "text 和 referenceAudio 字段都不能为空" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
+    const apiKey = req.headers.get("x-mimo-api-key") || undefined;
     const audioBase64 = await synthesizeWithClone(
       text,
       referenceAudio,
       referenceAudioFormat ?? "mp3",
       styleInstruction,
-      outputFormat ?? "wav"
+      outputFormat ?? "wav",
+      apiKey,
     );
 
     return NextResponse.json({ audioBase64 });

@@ -9,14 +9,16 @@ export async function POST(req: NextRequest) {
     if (!text || !voiceDescription) {
       return NextResponse.json(
         { error: "text 和 voiceDescription 字段都不能为空" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
+    const apiKey = req.headers.get("x-mimo-api-key") || undefined;
     const audioBase64 = await synthesizeWithDesign(
       text,
       voiceDescription,
-      outputFormat ?? "wav"
+      outputFormat ?? "wav",
+      apiKey,
     );
 
     return NextResponse.json({ audioBase64 });

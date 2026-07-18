@@ -12,17 +12,15 @@ DubFlow 是一个 YouTube 视频智能配音平台，支持一键将英文视频
 |------|------|
 | @heroui/react | UI 组件库（按钮、表单、弹窗、卡片等全部使用 HeroUI） |
 | @heroui/styles | HeroUI 样式系统（BEM 类名、variant 函数、滚动条工具类） |
-| 
-ext 16 | 框架（App Router，注意读取 
-ode_modules/next/dist/docs/ 中的变更指南） |
-| eact / eact-dom 19 | UI 运行时 |
-| 	ailwindcss v4 | 原子化 CSS |
+| next 16 | 框架（App Router，注意读取 node_modules/next/dist/docs/ 中的变更指南） |
+| react / react-dom 19 | UI 运行时 |
+| tailwindcss v4 | 原子化 CSS |
 | lucide-react | 图标库 |
 | clsx | 条件类名拼接 |
 
 ## 项目结构
 
-`
+```
 src/
 ├── app/                    # Next.js App Router 页面和 API 路由
 │   ├── layout.tsx          # 根布局（字体、ThemeProvider 包裹）
@@ -46,7 +44,7 @@ src/
 │   └── subtitle.ts         # 字幕解析工具
 └── types/
     └── index.ts            # 全局类型定义
-`
+```
 
 ## HeroUI 组件库使用规范（重要）
 
@@ -75,7 +73,7 @@ src/
 
 ### 导入方式
 
-`	sx
+```tsx
 // 组件导入
 import { Button, Input, Modal, Tabs } from "@heroui/react";
 
@@ -84,16 +82,16 @@ import { buttonVariants, tv } from "@heroui/styles";
 
 // 类型导入（推荐命名类型导入）
 import type { ButtonRootProps } from "@heroui/react";
-`
+```
 
 ### 样式自定义
 
 - 所有 HeroUI 组件都接受 className 属性，用 Tailwind 工具类覆盖默认样式
-- 支持 BEM 类名直接使用（如 utton button--primary）
+- 支持 BEM 类名直接使用（如 button button--primary）
 - 支持 render props 做动态样式（({ isPressed }) => ...）
-- 自定义 variant 用 	v() 扩展已有 variant 函数：
+- 自定义 variant 用 tv() 扩展已有 variant 函数：
 
-`	sx
+```tsx
 import { Button } from "@heroui/react";
 import { buttonVariants, tv } from "@heroui/styles";
 
@@ -107,20 +105,20 @@ const myVariants = tv({
     },
   },
 });
-`
+```
 
 ### 与 Next.js Link 配合
 
 HeroUI 按钮样式可以复用到 Next.js Link 上：
 
-`	sx
+```tsx
 import { buttonVariants } from "@heroui/styles";
 import Link from "next/link";
 
 <Link className={buttonVariants({ variant: "primary" })} href="/about">
   关于我们
 </Link>
-`
+```
 
 ## 主题与暗色模式
 
@@ -141,7 +139,7 @@ import Link from "next/link";
 - 路径别名：@/* 映射到 ./src/*
 - 全局类型统一放在 src/types/index.ts 中
 - 组件 props 使用 interface 定义
-- 使用 	ype 导入语法（import type { ... }）导入纯类型
+- 使用 type 导入语法（import type { ... }）导入纯类型
 
 ## 编码风格
 
@@ -152,15 +150,30 @@ import Link from "next/link";
 - 图标统一使用 lucide-react
 - 组件采用 export default function ComponentName() 的导出方式
 
+## 代码维护规范（重要）
+
+### 组件大小限制
+
+- **单个组件文件不得超过 300 行代码**
+- 超过 300 行的组件必须拆分为更小的子组件
+- 拆分原则：按功能职责拆分，每个子组件只负责一个明确的功能
+- 工具函数文件（如 lib/*.ts）建议不超过 300 行，超过时应按功能模块拆分
+
+### 拆分策略
+
+- UI 拆分：将复杂 UI 拆分为独立的展示组件
+- 逻辑拆分：将业务逻辑提取到自定义 hooks 中
+- 工具拆分：将工具函数按功能分组到不同文件
+
 ## API 路由规范
 
 - API 路由放在 src/app/api/ 目录下，每个功能一个子目录
-- 统一使用 Next.js Route Handlers（oute.ts）
+- 统一使用 Next.js Route Handlers（route.ts）
 - 错误处理返回标准 JSON 格式：{ error: "错误信息" }
 
 ## 重要提醒
 
-- 这是 Next.js 16 项目，API 和约定可能与你记忆中的版本有差异，写代码前请查阅 
-ode_modules/next/dist/docs/ 中的相关文档
+- 这是 Next.js 16 项目，API 和约定可能与你记忆中的版本有差异，写代码前请查阅 node_modules/next/dist/docs/ 中的相关文档
 - HeroUI v3 的 API 与 v2 不同，使用前务必查阅 .heroui-docs/react/ 目录下的文档，不要凭记忆写代码
 - 不要自己手写 HeroUI 已经提供的 UI 功能（如弹窗、表单验证、标签切换等）
+- **遵守组件大小限制，确保代码易于维护**

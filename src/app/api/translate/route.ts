@@ -4,16 +4,25 @@ import { translateText } from "@/lib/mimo";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { text, sourceLang, targetLang } = body;
+    const { text, sourceLang, targetLang } = body as {
+      text?: string;
+      sourceLang?: string;
+      targetLang?: string;
+    };
 
-    if (!text) {
-      return NextResponse.json({ error: "text 字段不能为空" }, { status: 400 });
+    if (!text?.trim()) {
+      return NextResponse.json(
+        { error: "text 字段不能为空" },
+        { status: 400 },
+      );
     }
 
+    const apiKey = req.headers.get("x-mimo-api-key") || undefined;
     const result = await translateText(
       text,
       sourceLang ?? "English",
-      targetLang ?? "Chinese"
+      targetLang ?? "Chinese",
+      apiKey,
     );
 
     return NextResponse.json({ translatedText: result });

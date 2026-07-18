@@ -76,8 +76,12 @@ export function generateBilingualSRT(
   entries: TranslatedEntry[]
 ): string {
   return entries
-    .map((e, i) => {
-      return `${i + 1}\n${e.startTime} --> ${e.endTime}\n${e.text}\n${e.translatedText}`;
-    })
+      .map((e, i) => {
+        const lines = [`${i + 1}`, `${e.startTime} --> ${e.endTime}`, e.text];
+        if (e.translatedText && e.translatedText.trim()) {
+          lines.push(e.translatedText);
+        }
+        return lines.join("\n");
+      })
     .join("\n\n");
 }

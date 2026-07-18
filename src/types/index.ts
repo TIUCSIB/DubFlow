@@ -3,7 +3,6 @@ export interface SubtitleEntry {
   startTime: string;
   endTime: string;
   text: string;
-  // 毫秒级时间戳，方便计算
   startMs: number;
   endMs: number;
 }
@@ -14,19 +13,22 @@ export interface TranslatedEntry extends SubtitleEntry {
 
 export type VoiceMode = "builtin" | "clone" | "design";
 
+export type ExportProgressPhase = "synthesizing" | "merging";
+
+export interface ExportProgress {
+  phase: ExportProgressPhase;
+  current: number;
+  total: number;
+}
+
 export interface TTSRequest {
   text: string;
   voiceMode: VoiceMode;
-  // 内置音色名称
   builtinVoice?: string;
-  // VoiceClone: 参考音频 base64
   referenceAudio?: string;
   referenceAudioFormat?: "mp3" | "wav";
-  // VoiceDesign: 音色描述
   voiceDescription?: string;
-  // 风格指令（通过自然语言控制情绪/语速等）
   styleInstruction?: string;
-  // 音频输出格式
   outputFormat?: "wav" | "mp3";
 }
 
@@ -36,18 +38,35 @@ export interface TranslateRequest {
   targetLang?: string;
 }
 
+export type ASRLanguage = "auto" | "zh" | "en";
+
 export interface ASRRequest {
   audioBase64: string;
   audioFormat: "mp3" | "wav";
-  language?: "auto" | "zh" | "en";
+  language?: ASRLanguage;
+}
+
+export interface ApiKeyProfile {
+  id: string;
+  label: string;
+  apiKey: string;
+  createdAt: number;
 }
 
 export interface PipelineJob {
   id: string;
   youtubeUrl: string;
-  status: "downloading" | "translating" | "cloning" | "synthesizing" | "completed" | "error";
+  status:
+    | "downloading"
+    | "translating"
+    | "cloning"
+    | "synthesizing"
+    | "completed"
+    | "error";
   progress: number;
- 英文字幕?: SubtitleEntry[];
+  englishSubtitles?: SubtitleEntry[];
   translatedSubtitles?: TranslatedEntry[];
   error?: string;
 }
+
+export type TranslationProvider = "mimo" | "deepl" | "google";
