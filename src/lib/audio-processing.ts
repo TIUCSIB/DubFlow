@@ -1,6 +1,7 @@
-﻿import type { ASRLanguage, SubtitleEntry, TranslatedEntry } from "@/types";
+import type { ASRLanguage, SubtitleEntry, TranslatedEntry } from "@/types";
 import { formatTimestamp } from "@/lib/subtitle";
 import { getApiKeyHeaders, getDeepLApiKey, getTranslationProvider } from "@/lib/api-key-storage";
+import { readProcessResponse } from "@/lib/process-response";
 
 export interface AudioPayload {
   audioBase64: string;
@@ -211,7 +212,7 @@ async function requestAudioProcess(
     throw new Error(error?.error || "璇煶璇嗗埆澶辫触");
   }
 
-  return response.json() as Promise<AudioProcessResult>;
+  return readProcessResponse(response);
 }
 
 interface AudioChunk extends AudioPayload {
