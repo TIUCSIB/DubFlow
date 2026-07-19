@@ -1,13 +1,13 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useState } from "react";
 import type { ASRLanguage, SubtitleEntry, TranslatedEntry } from "@/types";
 import { Button, Card, Tabs } from "@heroui/react";
-import { FileText, Type, Upload, Video } from "lucide-react";
 import FileUploader from "@/components/FileUploader";
 import YouTubeDownloader from "@/components/YouTubeDownloader";
 import ProcessingProgress from "@/components/ProcessingProgress";
 import SourceLanguageSelect from "@/components/SourceLanguageSelect";
+import TranslationInputModeTabList from "@/components/TranslationInputModeTabList";
 import {
   type AudioProcessProgress,
   extractAudioFromVideo,
@@ -208,7 +208,7 @@ export default function TranslationInputTabs({
   const entryCount = originalEntries.length || translatedEntries.length;
 
   return (
-    <Card className="fade-in-up">
+    <Card className="fade-in-up min-w-0 overflow-hidden">
       <h2 className="mb-4 text-sm font-medium text-gray-700 dark:text-gray-300">
         {"\u9009\u62e9\u8f93\u5165\u65b9\u5f0f"}
       </h2>
@@ -218,33 +218,7 @@ export default function TranslationInputTabs({
         onSelectionChange={handleSelectionChange}
         className="w-full"
       >
-        <Tabs.ListContainer>
-          <Tabs.List
-            aria-label={"\u9009\u62e9\u8f93\u5165\u65b9\u5f0f"}
-            className="w-full"
-          >
-            <Tabs.Tab id="file" className="min-h-11 flex-1 gap-2 px-3">
-              <Upload className="h-4 w-4" />
-              <span>{"\u97f3\u9891/\u89c6\u9891"}</span>
-            <Tabs.Indicator className="bg-white shadow-sm dark:bg-gray-700" />
-          </Tabs.Tab>
-          <Tabs.Tab id="srt" className="min-h-11 flex-1 gap-2 px-3">
-            <FileText className="h-4 w-4" />
-            <span>SRT {"\u5b57\u5e55"}</span>
-            <Tabs.Indicator className="bg-white shadow-sm dark:bg-gray-700" />
-          </Tabs.Tab>
-            <Tabs.Tab id="text" className="min-h-11 flex-1 gap-2 px-3">
-              <Type className="h-4 w-4" />
-              <span>{"\u6587\u672c\u8f93\u5165"}</span>
-              <Tabs.Indicator className="bg-white shadow-sm dark:bg-gray-700" />
-            </Tabs.Tab>
-          <Tabs.Tab id="youtube" className="min-h-11 flex-1 gap-2 px-3">
-            <Video className="h-4 w-4" />
-            <span>YouTube</span>
-            <Tabs.Indicator className="bg-white shadow-sm dark:bg-gray-700" />
-          </Tabs.Tab>
-          </Tabs.List>
-        </Tabs.ListContainer>
+        <TranslationInputModeTabList />
 
         <Tabs.Panel id="file" className="px-1">
           <div className="mt-4">

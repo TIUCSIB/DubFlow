@@ -2,7 +2,6 @@ import { createReadStream } from "fs";
 import { Readable } from "stream";
 import { NextRequest, NextResponse } from "next/server";
 import {
-  cleanupDownloadJob,
   getDownloadJob,
   getDownloadJobFile,
   startDownloadJob,
@@ -73,14 +72,6 @@ export async function GET(request: NextRequest) {
     }
     const fileStream = createReadStream(file.path);
     const webStream = Readable.toWeb(fileStream) as ReadableStream<Uint8Array>;
-    let cleaned = false;
-    const cleanup = () => {
-      if (cleaned) return;
-      cleaned = true;
-      void cleanupDownloadJob(jobId);
-    };
-    fileStream.once("close", cleanup);
-    fileStream.once("error", cleanup);
 
     const encodedFilename = encodeURIComponent(file.filename);
     const extension = file.filename.split(".").pop() || "bin";

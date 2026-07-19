@@ -1,8 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Button, ProgressBar, Tabs } from "@heroui/react";
-import { Download, FileVideo, Music } from "lucide-react";
+import { Download, FileVideo, Music, RotateCcw } from "lucide-react";
+import clsx from "clsx";
+import useYouTubeMediaDownload, {
+  type MediaDownloadState,
+  type MediaDownloadType,
+} from "@/hooks/useYouTubeMediaDownload";
 
 export interface MediaFormat {
   itag: number;
@@ -25,7 +30,6 @@ interface YouTubeMediaDownloadsProps {
   sourceUrl: string;
   videoInfo: VideoMediaInfo;
   onError: (message: string) => void;
-  onSuccess: (message: string) => void;
 }
 
 interface AudioOption {
@@ -34,33 +38,16 @@ interface AudioOption {
   estimatedBytes: number;
 }
 
-interface DownloadProgress {
-  progress: number;
-  message: string;
-}
-
-interface DownloadJobResponse extends DownloadProgress {
-  status: "preparing" | "downloading" | "processing" | "ready" | "failed";
-  error?: string;
-  downloadUrl?: string;
-}
-
 const TEXT = {
-  queryFailed: "\u67e5\u8be2\u4e0b\u8f7d\u8fdb\u5ea6\u5931\u8d25",
-  downloadFailed: "\u4e0b\u8f7d\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5",
-  downloadTimeout: "\u4e0b\u8f7d\u5904\u7406\u8d85\u65f6\uff0c\u8bf7\u91cd\u8bd5",
-  creating: "\u6b63\u5728\u521b\u5efa\u4e0b\u8f7d\u4efb\u52a1...",
-  createFailed: "\u521b\u5efa\u4e0b\u8f7d\u4efb\u52a1\u5931\u8d25",
-  ready: "\u6587\u4ef6\u5df2\u51c6\u5907\u5b8c\u6210\uff0c\u6b63\u5728\u4e0b\u8f7d",
-  media: "\u4e0b\u8f7d\u5a92\u4f53",
-  type: "\u4e0b\u8f7d\u7c7b\u578b",
-  audio: "\u97f3\u9891",
-  video: "\u89c6\u9891",
-  progress: "\u5a92\u4f53\u4e0b\u8f7d\u8fdb\u5ea6",
-  approximate: "\u7ea6",
-  processing: "\u5904\u7406\u4e2d...",
-  pendingSize: "\u5927\u5c0f\u5f85\u8ba1\u7b97",
-  noVideo: "\u8be5\u89c6\u9891\u6682\u672a\u63d0\u4f9b\u53ef\u4e0b\u8f7d\u7684 MP4 \u6e05\u6670\u5ea6\u3002",
+  media: "下载媒体",
+  type: "下载类型",
+  audio: "音频",
+  video: "视频",
+  progress: "媒体下载进度",
+  approximate: "约",
+  processing: "处理中...",
+  pendingSize: "大小待计算",
+  noVideo: "该视频暂未提供可下载的 MP4 清晰度。",
 };
 
 function formatFileSize(bytes: number): string {
@@ -68,36 +55,28 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / 1024 ** 2).toFixed(bytes >= 100 * 1024 ** 2 ? 0 : 1)} MB`;
 }
 
-async function readError(response: Response, fallback: string): Promise<string> {
-  const data = await response.json().catch(() => null);
-  return data?.error || fallback;
-}
-
-function wait(milliseconds: number) {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
-}
-
 export default function YouTubeMediaDownloads({
   sourceUrl,
   videoInfo,
   onError,
-  onSuccess,
 }: YouTubeMediaDownloadsProps) {
-  const [mediaType, setMediaType] = useState<"audio" | "video">("audio");
-  const [downloadingId, setDownloadingId] = useState<string | null>(null);
-  const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
-  const requestController = useRef<AbortController | null>(null);
+  const [mediaType, setMediaType] = useState<MediaDownloadType>("audio");
+  const duration = Number(videoInfo.duration) || 0;
+  const { states, startDownload, downloadAgain } = useYouTubeMediaDownload({
+    sourceUrl,
+    title: videoInfo.title,
+    duration,
+    onError,
+  });
 
-  useEffect(() => () => requestController.current?.abort(), []);
-
-  const audioOptions = useMemo<AudioOption[]>(() => {
-    const duration = Number(videoInfo.duration) || 0;
-    return [320, 256, 192, 128, 64].map((bitrate) => ({
+  const audioOptions = useMemo<AudioOption[]>(
+    () => [320, 256, 192, 128, 64].map((bitrate) => ({
       bitrate,
       label: `${bitrate} Kbps`,
       estimatedBytes: (duration * bitrate * 1000) / 8,
-    }));
-  }, [videoInfo.duration]);
+    })),
+    [duration],
+  );
 
   const audioTrackSize = useMemo(
     () => videoInfo.audioFormats.find(
@@ -116,72 +95,9 @@ export default function YouTubeMediaDownloads({
     [videoInfo.formats],
   );
 
-  const pollDownload = useCallback(async (jobId: string, signal: AbortSignal) => {
-    const startedAt = Date.now();
-    while (Date.now() - startedAt < 30 * 60 * 1000) {
-      const response = await fetch(`/api/youtube/download?jobId=${encodeURIComponent(jobId)}`, {
-        cache: "no-store",
-        signal,
-      });
-      if (!response.ok) throw new Error(await readError(response, TEXT.queryFailed));
-      const job = (await response.json()) as DownloadJobResponse;
-      setDownloadProgress({ progress: job.progress, message: job.message });
-      if (job.status === "failed") throw new Error(job.error || job.message || TEXT.downloadFailed);
-      if (job.status === "ready" && job.downloadUrl) return job.downloadUrl;
-      await wait(800);
-    }
-    throw new Error(TEXT.downloadTimeout);
-  }, []);
-
-  const handleDownload = useCallback(
-    async (type: "audio" | "video", option: AudioOption | MediaFormat) => {
-      const pendingId = type === "audio"
-        ? `audio-${(option as AudioOption).bitrate}`
-        : `video-${(option as MediaFormat).itag}`;
-      const controller = new AbortController();
-      requestController.current?.abort();
-      requestController.current = controller;
-      setDownloadingId(pendingId);
-      setDownloadProgress({ progress: 1, message: TEXT.creating });
-      onError("");
-
-      try {
-        const response = await fetch("/api/youtube/download", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            url: sourceUrl.trim(),
-            type,
-            title: videoInfo.title,
-            duration: Number(videoInfo.duration) || 0,
-            audioBitrate: type === "audio" ? (option as AudioOption).bitrate : undefined,
-            videoItag: type === "video" ? (option as MediaFormat).itag : undefined,
-          }),
-          signal: controller.signal,
-        });
-        if (!response.ok) throw new Error(await readError(response, TEXT.createFailed));
-        const { jobId } = (await response.json()) as { jobId: string };
-        const downloadUrl = await pollDownload(jobId, controller.signal);
-        const anchor = document.createElement("a");
-        anchor.href = downloadUrl;
-        anchor.download = "";
-        document.body.appendChild(anchor);
-        anchor.click();
-        anchor.remove();
-        setDownloadProgress({ progress: 100, message: TEXT.ready });
-        onSuccess(`${type === "audio" ? TEXT.audio : TEXT.video}${TEXT.ready}`);
-      } catch (error: unknown) {
-        if (!(error instanceof DOMException && error.name === "AbortError")) {
-          onError(error instanceof Error ? error.message : TEXT.downloadFailed);
-          setDownloadProgress(null);
-        }
-      } finally {
-        if (requestController.current === controller) requestController.current = null;
-        setDownloadingId(null);
-      }
-    },
-    [onError, onSuccess, pollDownload, sourceUrl, videoInfo.duration, videoInfo.title],
-  );
+  const audioState = states.audio;
+  const videoState = states.video;
+  const selectedState = states[mediaType];
 
   return (
     <section>
@@ -192,7 +108,7 @@ export default function YouTubeMediaDownloads({
 
       <Tabs
         selectedKey={mediaType}
-        onSelectionChange={(key) => setMediaType(key as "audio" | "video")}
+        onSelectionChange={(key) => setMediaType(key as MediaDownloadType)}
         className="w-full"
       >
         <Tabs.ListContainer className="mb-3">
@@ -205,20 +121,11 @@ export default function YouTubeMediaDownloads({
           </Tabs.List>
         </Tabs.ListContainer>
 
-        {downloadProgress && (
-          <div className="mb-3 rounded-md border border-teal-200 bg-teal-50 p-3 dark:border-teal-900/70 dark:bg-teal-950/30">
-            <div className="mb-2 flex items-center justify-between gap-3 text-xs text-teal-800 dark:text-teal-200">
-              <span className="min-w-0 truncate">{downloadProgress.message}</span>
-              <span className="shrink-0 font-mono">{downloadProgress.progress}%</span>
-            </div>
-            <ProgressBar
-              value={downloadProgress.progress}
-              size="sm"
-              color={downloadProgress.progress === 100 ? "success" : "accent"}
-              aria-label={TEXT.progress}
-            />
-          </div>
-        )}
+        <DownloadStatusPanel
+          type={mediaType}
+          state={selectedState}
+          onDownloadAgain={downloadAgain}
+        />
 
         <Tabs.Panel id="audio">
           <div className="grid gap-2 sm:grid-cols-2">
@@ -228,9 +135,14 @@ export default function YouTubeMediaDownloads({
                 <Button
                   key={option.bitrate}
                   variant="secondary"
-                  onPress={() => void handleDownload("audio", option)}
-                  isPending={downloadingId === pendingId}
-                  isDisabled={downloadingId !== null}
+                  onPress={() => void startDownload({
+                    type: "audio",
+                    pendingId,
+                    label: `MP3 ${option.label} 音频`,
+                    audioBitrate: option.bitrate,
+                  })}
+                  isPending={audioState.pendingId === pendingId}
+                  isDisabled={audioState.pendingId !== null}
                   className="h-auto min-h-16 w-full justify-between rounded-lg border border-teal-200 bg-teal-50 px-3 py-2.5 text-left text-teal-900 hover:border-teal-400 hover:bg-teal-100 dark:border-teal-900/70 dark:bg-teal-950/30 dark:text-teal-100 dark:hover:bg-teal-900/40"
                 >
                   <span className="flex flex-col items-start">
@@ -240,7 +152,7 @@ export default function YouTubeMediaDownloads({
                     </span>
                   </span>
                   <span className="text-sm font-semibold">
-                    {downloadingId === pendingId ? TEXT.processing : option.label}
+                    {audioState.pendingId === pendingId ? TEXT.processing : option.label}
                   </span>
                 </Button>
               );
@@ -258,9 +170,14 @@ export default function YouTubeMediaDownloads({
                   <Button
                     key={option.itag}
                     variant="secondary"
-                    onPress={() => void handleDownload("video", option)}
-                    isPending={downloadingId === pendingId}
-                    isDisabled={downloadingId !== null}
+                    onPress={() => void startDownload({
+                      type: "video",
+                      pendingId,
+                      label: `MP4 ${option.qualityLabel} 视频`,
+                      videoItag: option.itag,
+                    })}
+                    isPending={videoState.pendingId === pendingId}
+                    isDisabled={videoState.pendingId !== null}
                     className="h-auto min-h-16 w-full justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-left text-emerald-900 hover:border-emerald-400 hover:bg-emerald-100 dark:border-emerald-900/70 dark:bg-emerald-950/30 dark:text-emerald-100 dark:hover:bg-emerald-900/40"
                   >
                     <span className="flex flex-col items-start">
@@ -270,7 +187,7 @@ export default function YouTubeMediaDownloads({
                       </span>
                     </span>
                     <span className="text-sm font-semibold">
-                      {downloadingId === pendingId ? TEXT.processing : option.qualityLabel}
+                      {videoState.pendingId === pendingId ? TEXT.processing : option.qualityLabel}
                     </span>
                   </Button>
                 );
@@ -284,5 +201,55 @@ export default function YouTubeMediaDownloads({
         </Tabs.Panel>
       </Tabs>
     </section>
+  );
+}
+
+function DownloadStatusPanel({
+  type,
+  state,
+  onDownloadAgain,
+}: {
+  type: MediaDownloadType;
+  state: MediaDownloadState;
+  onDownloadAgain: (type: MediaDownloadType) => void;
+}) {
+  if (state.status === "idle") return null;
+
+  const isReady = state.status === "ready" && Boolean(state.downloadUrl);
+  const isFailed = state.status === "failed";
+
+  return (
+    <div
+      className={clsx(
+        "mb-3 rounded-md border p-3",
+        isFailed
+          ? "border-red-200 bg-red-50 dark:border-red-900/70 dark:bg-red-950/30"
+          : "border-teal-200 bg-teal-50 dark:border-teal-900/70 dark:bg-teal-950/30",
+      )}
+    >
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+        <div className={clsx("min-w-0 text-xs", isFailed ? "text-red-700 dark:text-red-200" : "text-teal-800 dark:text-teal-200")}>
+          <p className="truncate font-medium">{state.message}</p>
+          {state.label && <p className="mt-0.5 truncate opacity-70">{state.label}</p>}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <span className={clsx("font-mono text-xs", isFailed ? "text-red-700 dark:text-red-200" : "text-teal-800 dark:text-teal-200")}>
+            {state.progress}%
+          </span>
+          {isReady && (
+            <Button size="sm" variant="secondary" onPress={() => onDownloadAgain(type)}>
+              <RotateCcw className="h-3.5 w-3.5" />
+              再次下载
+            </Button>
+          )}
+        </div>
+      </div>
+      <ProgressBar
+        value={state.progress}
+        size="sm"
+        color={isReady ? "success" : isFailed ? "danger" : "accent"}
+        aria-label={`${type === "audio" ? TEXT.audio : TEXT.video}${TEXT.progress}`}
+      />
+    </div>
   );
 }

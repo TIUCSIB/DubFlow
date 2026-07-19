@@ -2,15 +2,12 @@
 
 import { useCallback, useState } from "react";
 import type { SubtitleEntry, TranslatedEntry } from "@/types";
-import { Button, Input } from "@heroui/react";
+import { Button, Input, toast } from "@heroui/react";
 import { AlertCircle, Captions, Download, Link } from "lucide-react";
 import { getApiKeyHeaders } from "@/lib/api-key-storage";
 import YouTubeMediaDownloads, { type MediaFormat } from "@/components/YouTubeMediaDownloads";
 import YouTubeVideoSummary from "@/components/YouTubeVideoSummary";
-import {
-  YouTubeAccessNotice,
-  YouTubeSuccessNotice,
-} from "@/components/YouTubeStatusNotice";
+import { YouTubeAccessNotice } from "@/components/YouTubeStatusNotice";
 interface CaptionTrack {
   languageCode: string;
   languageName: string;
@@ -99,12 +96,6 @@ export default function YouTubeDownloader({ onSubtitleLoad, onError }: YouTubeDo
   const [downloadingSubtitle, setDownloadingSubtitle] = useState<string | null>(null);
   const [loadingToEditor, setLoadingToEditor] = useState(false);
   const [loadingToEditorStatus, setLoadingToEditorStatus] = useState("");
-  const [successMsg, setSuccessMsg] = useState("");
-
-  const showSuccess = useCallback((msg: string) => {
-    setSuccessMsg(msg);
-    setTimeout(() => setSuccessMsg(""), 4000);
-  }, []);
 
   const handleFetch = useCallback(async () => {
     const trimmed = url.trim();
@@ -117,6 +108,13 @@ export default function YouTubeDownloader({ onSubtitleLoad, onError }: YouTubeDo
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "获取视频信息失败");
       setVideoInfo(data);
+      if (data.accessLimited) {
+        toast.warning("已加载视频基础信息", {
+          description: "YouTube 暂时限制了字幕和媒体访问。",
+        });
+      } else {
+        toast.success("视频信息解析成功");
+      }
     } catch (error: unknown) {
       onError(error instanceof Error ? error.message : "获取视频信息失败");
     } finally {
@@ -154,7 +152,9 @@ export default function YouTubeDownloader({ onSubtitleLoad, onError }: YouTubeDo
         }
         const translated = await readTranslateStream(translateResponse);
         onSubtitleLoad(entries, translated);
-        showSuccess(`已加载 ${entries.length} 条字幕并完成翻译`);
+        toast.success("字幕已加载到编辑器", {
+          description: `共 ${entries.length} 条字幕，自动翻译已经完成。`,
+        });
       } catch (error: unknown) {
         onError(error instanceof Error ? error.message : "字幕加载失败");
       } finally {
@@ -162,7 +162,7 @@ export default function YouTubeDownloader({ onSubtitleLoad, onError }: YouTubeDo
         setLoadingToEditorStatus("");
       }
     },
-    [onSubtitleLoad, onError, showSuccess],
+    [onSubtitleLoad, onError],
   );
 
   const handleDownloadSubtitle = useCallback(
@@ -183,14 +183,14 @@ export default function YouTubeDownloader({ onSubtitleLoad, onError }: YouTubeDo
         a.click();
         a.remove();
         URL.revokeObjectURL(a.href);
-        showSuccess("字幕文件已下载");
+        toast.success("字幕文件已下载");
       } catch (error: unknown) {
         onError(error instanceof Error ? error.message : "字幕下载失败");
       } finally {
         setDownloadingSubtitle(null);
       }
     },
-    [videoInfo, onError, showSuccess],
+    [videoInfo, onError],
   );
 
   return (
@@ -219,10 +219,6 @@ export default function YouTubeDownloader({ onSubtitleLoad, onError }: YouTubeDo
           {loading ? "解析中..." : "解析"}
         </Button>
       </div>
-
-      {successMsg && (
-        <YouTubeSuccessNotice message={successMsg} onDismiss={() => setSuccessMsg("")} />
-      )}
 
       {videoInfo && (
         <div className="fade-in-up space-y-4">
@@ -290,7 +286,6 @@ export default function YouTubeDownloader({ onSubtitleLoad, onError }: YouTubeDo
               sourceUrl={url}
               videoInfo={videoInfo}
               onError={onError}
-              onSuccess={showSuccess}
             />
           )}
         </div>

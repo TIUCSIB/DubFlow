@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { Toast } from "@heroui/react";
 
 type Theme = "dark" | "light";
 
@@ -52,6 +53,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme, isReady }}>
       {children}
+      <Toast.Provider
+        placement="top end"
+        className="top-16 right-4"
+        width="min(420px, calc(100vw - 2rem))"
+      />
     </ThemeContext.Provider>
   );
 }

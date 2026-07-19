@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Modal, Button, Input } from "@heroui/react";
+import { Modal, Button, Input, toast } from "@heroui/react";
 import {
-  AlertCircle,
   Check,
   Eye,
   EyeOff,
@@ -13,6 +12,8 @@ import {
 import type { ReactNode } from "react";
 import type { ApiKeyProfile, TranslationProvider } from "@/types";
 import ApiKeyProfileList from "@/components/ApiKeyProfileList";
+import SettingsNotices from "@/components/SettingsNotices";
+import TranslationServiceSettings from "@/components/TranslationServiceSettings";
 import {
   getDeepLApiKey,
   getSelectedApiKeyId,
@@ -39,13 +40,12 @@ export default function SettingsModal({
   const [label, setLabel] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({});
-  const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "error">("idle");
   const [profiles, setProfiles] = useState<ApiKeyProfile[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [translationProvider, setTranslationProvider] =
     useState<TranslationProvider>("mimo");
   const [deeplApiKey, setDeeplApiKey] = useState("");
-  const [providerSaved, setProviderSaved] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -66,7 +66,6 @@ export default function SettingsModal({
     setVisibleKeys({});
     setTranslationProvider(getTranslationProvider());
     setDeeplApiKey(getDeepLApiKey() || "");
-    setProviderSaved(false);
     setStatus("idle");
   }, [isOpen]);
 
@@ -103,7 +102,10 @@ export default function SettingsModal({
     setSelectedId(nextProfile.id);
     setApiKey("");
     setLabel("");
-    setStatus("success");
+    setStatus("idle");
+    toast.success("API Key 已保存", {
+      description: "当前浏览器已经保存这组配置，并将它设为当前使用的配置。",
+    });
   };
 
   const handleSaveProvider = () => {
@@ -111,8 +113,7 @@ export default function SettingsModal({
     if (translationProvider === "deepl") {
       saveDeepLApiKey(deeplApiKey.trim());
     }
-    setProviderSaved(true);
-    setTimeout(() => setProviderSaved(false), 2000);
+    toast.success("翻译设置已保存");
   };
 
   const handleSelect = useCallback((id: string) => {
@@ -144,6 +145,7 @@ export default function SettingsModal({
         return next;
       });
       setStatus("idle");
+      toast.success("API Key 配置已删除");
     },
     [profiles, selectedId],
   );
@@ -263,118 +265,14 @@ export default function SettingsModal({
                   </div>
                 </div>
 
-                {status === "success" && (
-                  <div className="flex items-center gap-2 rounded-lg bg-green-50 p-3 dark:bg-green-900/20">
-                    <Check className="h-4 w-4 text-green-500" />
-                    <span className="text-sm text-green-700 dark:text-green-300">
-                      API Key 已保存到当前浏览器
-                    </span>
-                  </div>
-                )}
-
-                {status === "error" && (
-                  <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 dark:bg-red-900/20">
-                    <AlertCircle className="h-4 w-4 text-red-500" />
-                    <span className="text-sm text-red-700 dark:text-red-300">
-                      请输入 API Key
-                    </span>
-                  </div>
-                )}
-
-                {/* 翻译服务选择 */}
-                <div className="space-y-4 rounded-lg border border-gray-200 p-4 dark:border-gray-700">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                      翻译服务
-                    </h3>
-                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                      选择字幕翻译使用的服务。DeepL Free
-                      每月50万字符免费，Google Translate 完全免费。
-                    </p>
-                  </div>
-
-                  <div className="flex gap-2">
-                    {(["mimo", "deepl", "google"] as const).map((provider) => (
-                      <button
-                        key={provider}
-                        type="button"
-                        onClick={() => setTranslationProvider(provider)}
-                        className={`flex-1 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                          translationProvider === provider
-                            ? "bg-teal-500 text-white shadow-sm"
-                            : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
-                        }`}
-                      >
-                        {provider === "mimo" && "MiMo"}
-                        {provider === "deepl" && "DeepL Free"}
-                        {provider === "google" && "Google"}
-                      </button>
-                    ))}
-                  </div>
-
-                  {translationProvider === "deepl" && (
-                    <div className="flex items-center gap-3">
-                      <label
-                        htmlFor="deepl-api-key"
-                        className="shrink-0 text-sm font-medium text-gray-700 dark:text-gray-300"
-                      >
-                        DeepL API Key
-                      </label>
-                      <Input
-                        id="deepl-api-key"
-                        aria-label="DeepL API Key"
-                        type="password"
-                        placeholder="输入你的 DeepL Free API Key"
-                        value={deeplApiKey}
-                        onChange={(e) => setDeeplApiKey(e.target.value)}
-                      />
-                    </div>
-                  )}
-
-                  {translationProvider === "google" && (
-                    <p className="text-xs text-gray-400 dark:text-gray-500">
-                      无需 API Key，直接使用。大量请求时可能被 Google
-                      限制。
-                    </p>
-                  )}
-
-                  {translationProvider === "mimo" && (
-                    <p className="text-xs text-gray-400 dark:text-gray-500">
-                      使用上方已配置的 MiMo API Key 进行翻译。
-                    </p>
-                  )}
-
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onPress={handleSaveProvider}
-                    isDisabled={
-                      translationProvider === "deepl" && !deeplApiKey.trim()
-                    }
-                  >
-                    保存翻译设置
-                  </Button>
-
-                  {providerSaved && (
-                    <div className="flex items-center gap-2 rounded-lg bg-green-50 p-2 dark:bg-green-900/20">
-                      <Check className="h-3.5 w-3.5 text-green-500" />
-                      <span className="text-xs text-green-700 dark:text-green-300">
-                        翻译设置已保存
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* 存储说明 */}
-                <div className="rounded-lg bg-gray-50 p-4 dark:bg-gray-800">
-                  <h4 className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-                    存储说明
-                  </h4>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    配置只保存在当前浏览器的 localStorage
-                    中。切换浏览器或清理网站数据后，需要重新添加。
-                  </p>
-                </div>
+                <TranslationServiceSettings
+                  provider={translationProvider}
+                  deeplApiKey={deeplApiKey}
+                  onProviderChange={setTranslationProvider}
+                  onDeepLApiKeyChange={setDeeplApiKey}
+                  onSave={handleSaveProvider}
+                />
+                <SettingsNotices showApiKeyError={status === "error"} />
               </div>
             </Modal.Body>
             <Modal.Footer>

@@ -36,7 +36,7 @@ export default function Header() {
                   size="sm"
                   onPress={() => setIsSettingsOpen(true)}
                   aria-label="设置"
-                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                  className="text-gray-500 hover:text-gray-700 focus-visible:ring-0 focus-visible:ring-offset-0 data-[focus-visible=true]:ring-0 data-[focus-visible=true]:ring-offset-0 dark:text-gray-400 dark:hover:text-gray-200"
                 >
                   <span aria-hidden="true">
                     <Settings className="h-4 w-4" />

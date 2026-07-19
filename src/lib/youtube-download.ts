@@ -118,6 +118,7 @@ export function getDownloadJob(id: string): DownloadJobSnapshot | null {
 }
 
 export function getDownloadJobFile(id: string): DownloadJobFile | null {
+  pruneExpiredJobs();
   const job = jobs.get(id);
   if (!job || job.status !== "ready" || !job.outputPath || !job.extension || !job.size) return null;
   const safeTitle = job.title.replace(/[\\/:*?"<>|\u0000-\u001f]/g, " ").trim()
@@ -128,11 +129,4 @@ export function getDownloadJobFile(id: string): DownloadJobFile | null {
     contentType: job.extension === "mp3" ? "audio/mpeg" : "video/mp4",
     size: job.size,
   };
-}
-
-export async function cleanupDownloadJob(id: string) {
-  const job = jobs.get(id);
-  if (!job) return;
-  jobs.delete(id);
-  await removeDirectory(job.tempDirectory);
 }
