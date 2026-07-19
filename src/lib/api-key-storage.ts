@@ -71,14 +71,14 @@ export const DEEPL_API_KEY_KEY = "dubflow-deepl-api-key";
 
 import type { TranslationProvider } from "@/types";
 
-export function getTranslationProvider(): TranslationProviderSetting {
-  if (typeof window === "undefined") return "mimo" as TranslationProvider;
+export function getTranslationProvider(): TranslationProvider {
+  if (typeof window === "undefined") return "mimo";
   const value = window.localStorage.getItem(TRANSLATION_PROVIDER_KEY);
-  if (value === "deepl" || value === "google" || value === "mimo") return value as TranslationProvider;
-  return "mimo" as TranslationProvider;
+  if (value === "deepl" || value === "google" || value === "mimo") return value;
+  return "mimo";
 }
 
-export function saveTranslationProvider(provider: TranslationProviderSetting): void {
+export function saveTranslationProvider(provider: TranslationProvider): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(TRANSLATION_PROVIDER_KEY, provider);
 }
@@ -95,11 +95,12 @@ export function saveDeepLApiKey(key: string): void {
 
 export function getTranslationHeaders(headers: HeadersInit = {}): HeadersInit {
   const provider = getTranslationProvider();
-  const result = { ...headers, "x-translation-provider": provider };
+  const result = new Headers(headers);
+  result.set("x-translation-provider", provider);
 
   if (provider === "deepl") {
     const deeplKey = getDeepLApiKey();
-    if (deeplKey) result["x-deepl-api-key"] = deeplKey;
+    if (deeplKey) result.set("x-deepl-api-key", deeplKey);
   }
 
   return result;

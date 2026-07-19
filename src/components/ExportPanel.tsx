@@ -12,6 +12,7 @@ interface ExportPanelProps {
     withAudio: boolean;
   }) => Promise<void>;
   isExporting: boolean;
+  isExportingSrt: boolean;
   exportProgress: ExportProgress | null;
 }
 
@@ -19,6 +20,7 @@ export default function ExportPanel({
   hasEntries,
   onExport,
   isExporting,
+  isExportingSrt,
   exportProgress,
 }: ExportPanelProps) {
   const [srtBilingual, setSrtBilingual] = useState(false);

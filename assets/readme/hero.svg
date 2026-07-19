@@ -1,193 +1,141 @@
 <svg xmlns="http://www.w3.org/2000/svg"
      width="1200" height="420" viewBox="0 0 1200 420"
      role="img" aria-labelledby="hero-title hero-desc">
-  <title id="hero-title">DubFlow - YouTube 视频智能配音平台</title>
-  <desc id="hero-desc">DubFlow 的 README 标题图，展示了从视频输入到中文配音输出的完整流水线。</desc>
+  <title id="hero-title">DubFlow - 视频翻译与中文配音工作台</title>
+  <desc id="hero-desc">以字幕时间轴、双语校对和音频波形展示 DubFlow 从内容输入到配音导出的工作流。</desc>
 
   <defs>
-    <linearGradient id="bg-grad" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#0B0F19"/>
-      <stop offset="100%" stop-color="#0F172A"/>
-    </linearGradient>
-    <linearGradient id="teal-grad" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#14B8A6"/>
-      <stop offset="100%" stop-color="#10B981"/>
-    </linearGradient>
-    <linearGradient id="indigo-grad" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#818CF8"/>
-      <stop offset="100%" stop-color="#6366F1"/>
-    </linearGradient>
-    <clipPath id="round-sm"><rect width="56" height="56" rx="10"/></clipPath>
+    <clipPath id="canvas-clip">
+      <rect width="1200" height="420" rx="24"/>
+    </clipPath>
   </defs>
 
-  <!-- Background -->
-  <rect width="1200" height="420" rx="0" fill="url(#bg-grad)"/>
+  <g clip-path="url(#canvas-clip)">
+    <rect width="1200" height="420" fill="#111311"/>
+    <rect x="0" y="0" width="16" height="420" fill="#2DD4BF"/>
+    <rect x="16" y="0" width="5" height="420" fill="#FF7A59"/>
 
-  <!-- Subtle grid pattern -->
-  <g opacity="0.04" stroke="#94A3B8" stroke-width="1">
-    <line x1="0" y1="105" x2="1200" y2="105"/>
-    <line x1="0" y1="210" x2="1200" y2="210"/>
-    <line x1="0" y1="315" x2="1200" y2="315"/>
-    <line x1="300" y1="0" x2="300" y2="420"/>
-    <line x1="600" y1="0" x2="600" y2="420"/>
-    <line x1="900" y1="0" x2="900" y2="420"/>
-  </g>
+    <g id="title-block" transform="translate(72 58)">
+      <text x="0" y="0"
+            font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+            font-size="16" font-weight="700" fill="#2DD4BF">LOCAL VIDEO DUBBING WORKSPACE</text>
 
-  <!-- Decorative waveform (left) -->
-  <g transform="translate(48 340)" opacity="0.15">
-    <path d="M0,20 Q15,0 30,20 Q45,40 60,20 Q75,0 90,20 Q105,40 120,20 Q135,0 150,20 Q165,40 180,20 Q195,0 210,20"
-          fill="none" stroke="url(#teal-grad)" stroke-width="2.5" stroke-linecap="round"/>
-  </g>
-
-  <!-- Decorative waveform (right) -->
-  <g transform="translate(900 360)" opacity="0.12">
-    <path d="M0,15 Q20,0 40,15 Q60,30 80,15 Q100,0 120,15 Q140,30 160,15 Q180,0 200,15 Q220,30 240,15 Q260,0 280,15"
-          fill="none" stroke="url(#indigo-grad)" stroke-width="2" stroke-linecap="round"/>
-  </g>
-
-  <!-- Category label -->
-  <g transform="translate(72 52)">
-    <rect width="180" height="28" rx="14" fill="#14B8A6" opacity="0.12"/>
-    <text x="90" y="19" text-anchor="middle"
-          font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
-          font-size="13" font-weight="600" fill="#14B8A6" letter-spacing="0.5">
-      YOUTUBE VIDEO DUBBING
-    </text>
-  </g>
-
-  <!-- Project name -->
-  <text transform="translate(72 108)"
-        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
-        font-size="52" font-weight="800" fill="#F0F4F8" letter-spacing="-0.5">
-    Dub<tspan fill="url(#teal-grad)">Flow</tspan>
-  </text>
-
-  <!-- Description -->
-  <text transform="translate(72 148)"
-        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
-        font-size="20" font-weight="400" fill="#94A3B8">
-    YouTube 视频智能配音平台
-  </text>
-  <text transform="translate(72 178)"
-        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
-        font-size="15" fill="#64748B">
-    一键将英文视频翻译成中文配音，内置声音克隆与音色设计
-  </text>
-
-  <!-- Tech badges -->
-  <g transform="translate(72 210)">
-    <rect width="68" height="26" rx="6" fill="#1E293B" stroke="#334155" stroke-width="1"/>
-    <text x="34" y="17.5" text-anchor="middle"
-          font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-          font-size="11" fill="#E2E8F0">Next.js</text>
-
-    <rect x="76" width="62" height="26" rx="6" fill="#1E293B" stroke="#334155" stroke-width="1"/>
-    <text x="107" y="17.5" text-anchor="middle"
-          font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-          font-size="11" fill="#E2E8F0">React</text>
-
-    <rect x="146" width="64" height="26" rx="6" fill="#1E293B" stroke="#334155" stroke-width="1"/>
-    <text x="178" y="17.5" text-anchor="middle"
-          font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-          font-size="11" fill="#E2E8F0">HeroUI</text>
-
-    <rect x="218" width="58" height="26" rx="6" fill="#1E293B" stroke="#334155" stroke-width="1"/>
-    <text x="247" y="17.5" text-anchor="middle"
-          font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-          font-size="11" fill="#E2E8F0">MiMo</text>
-
-    <rect x="284" width="52" height="26" rx="6" fill="#1E293B" stroke="#334155" stroke-width="1"/>
-    <text x="310" y="17.5" text-anchor="middle"
-          font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-          font-size="11" fill="#E2E8F0">TTS</text>
-  </g>
-
-  <!-- Pipeline visualization (right side) -->
-  <g transform="translate(600 50)">
-    <!-- Stage 1: Video Input -->
-    <g transform="translate(0 80)">
-      <rect width="110" height="70" rx="10" fill="#1E293B" stroke="#334155" stroke-width="1.5"/>
-      <!-- Play icon -->
-      <circle cx="32" cy="35" r="16" fill="#14B8A6" opacity="0.15"/>
-      <path d="M27,25 L27,45 L43,35 Z" fill="#14B8A6"/>
-      <text x="62" y="30" text-anchor="middle"
+      <text x="0" y="82"
             font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
-            font-size="11" font-weight="600" fill="#F0F4F8">YouTube</text>
-      <text x="62" y="46" text-anchor="middle"
+            font-size="68" font-weight="800" fill="#F5F2EA">DubFlow</text>
+
+      <text x="0" y="130"
             font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
-            font-size="10" fill="#64748B">视频输入</text>
-    </g>
+            font-size="24" font-weight="650" fill="#F5F2EA">从字幕到中文配音，一条工作流完成</text>
 
-    <!-- Arrow 1 -->
-    <g transform="translate(110 115)" opacity="0.5">
-      <line x1="0" y1="0" x2="36" y2="0" stroke="#475569" stroke-width="2" stroke-dasharray="4 3"/>
-      <path d="M36,-5 L46,0 L36,5" fill="#475569"/>
-    </g>
+      <text x="0" y="170"
+            font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
+            font-size="17" fill="#A8AEA8">识别 · 翻译 · 校对 · 音色 · 导出</text>
 
-    <!-- Stage 2: Subtitle -->
-    <g transform="translate(156 80)">
-      <rect width="110" height="70" rx="10" fill="#1E293B" stroke="#334155" stroke-width="1.5"/>
-      <g transform="translate(12 22)">
-        <rect width="44" height="6" rx="3" fill="#14B8A6" opacity="0.6"/>
-        <rect y="10" width="36" height="6" rx="3" fill="#14B8A6" opacity="0.4"/>
-        <rect y="20" width="40" height="6" rx="3" fill="#14B8A6" opacity="0.6"/>
-        <rect y="30" width="28" height="6" rx="3" fill="#14B8A6" opacity="0.3"/>
+      <g transform="translate(0 214)">
+        <rect width="132" height="42" rx="8" fill="#1C211E" stroke="#343A35"/>
+        <circle cx="22" cy="21" r="7" fill="#2DD4BF"/>
+        <text x="40" y="27"
+              font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+              font-size="16" fill="#E7EAE5">AUDIO / VIDEO</text>
+
+        <rect x="144" width="88" height="42" rx="8" fill="#1C211E" stroke="#343A35"/>
+        <rect x="163" y="14" width="15" height="14" rx="2" fill="#FF7A59"/>
+        <text x="188" y="27"
+              font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+              font-size="16" fill="#E7EAE5">SRT</text>
+
+        <rect x="244" width="124" height="42" rx="8" fill="#1C211E" stroke="#343A35"/>
+        <path d="M264 13 L264 29 L279 21 Z" fill="#F7C948"/>
+        <text x="290" y="27"
+              font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+              font-size="16" fill="#E7EAE5">YOUTUBE</text>
       </g>
-      <text x="80" y="30" text-anchor="middle"
-            font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
-            font-size="11" font-weight="600" fill="#F0F4F8">字幕</text>
-      <text x="80" y="46" text-anchor="middle"
-            font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
-            font-size="10" fill="#64748B">识别 &amp; 编辑</text>
     </g>
 
-    <!-- Arrow 2 -->
-    <g transform="translate(266 115)" opacity="0.5">
-      <line x1="0" y1="0" x2="36" y2="0" stroke="#475569" stroke-width="2" stroke-dasharray="4 3"/>
-      <path d="M36,-5 L46,0 L36,5" fill="#475569"/>
-    </g>
+    <g id="subtitle-workspace" transform="translate(596 44)">
+      <rect width="548" height="286" rx="16" fill="#F5F2EA"/>
 
-    <!-- Stage 3: Translate -->
-    <g transform="translate(312 80)">
-      <rect width="110" height="70" rx="10" fill="#1E293B" stroke="#334155" stroke-width="1.5"/>
-      <g transform="translate(14 24)">
-        <text x="0" y="12" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#818CF8">Hello</text>
-        <path d="M42,6 L52,6" stroke="#6366F1" stroke-width="1.5" stroke-linecap="round"/>
-        <path d="M48,2 L52,6 L48,10" fill="none" stroke="#6366F1" stroke-width="1.5" stroke-linecap="round"/>
-        <text x="0" y="32" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="11" fill="#F0F4F8">你好</text>
+      <g transform="translate(24 22)">
+        <circle cx="7" cy="7" r="7" fill="#FF7A59"/>
+        <circle cx="31" cy="7" r="7" fill="#F7C948"/>
+        <circle cx="55" cy="7" r="7" fill="#2DD4BF"/>
+        <text x="500" y="13" text-anchor="end"
+              font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+              font-size="15" font-weight="700" fill="#676D68">SUBTITLE EDITOR</text>
       </g>
-      <text x="82" y="30" text-anchor="middle"
-            font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
-            font-size="11" font-weight="600" fill="#F0F4F8">翻译</text>
-      <text x="82" y="46" text-anchor="middle"
-            font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
-            font-size="10" fill="#64748B">AI 翻译</text>
-    </g>
 
-    <!-- Arrow 3 -->
-    <g transform="translate(422 115)" opacity="0.5">
-      <line x1="0" y1="0" x2="36" y2="0" stroke="#475569" stroke-width="2" stroke-dasharray="4 3"/>
-      <path d="M36,-5 L46,0 L36,5" fill="#475569"/>
-    </g>
+      <line x1="24" y1="54" x2="524" y2="54" stroke="#D7D8D2"/>
 
-    <!-- Stage 4: Voice Output -->
-    <g transform="translate(468 80)">
-      <rect width="110" height="70" rx="10" fill="#1E293B" stroke="#334155" stroke-width="1.5"/>
-      <!-- Speaker/waveform icon -->
-      <g transform="translate(10 26)">
-        <rect width="12" height="20" rx="2" fill="#10B981" opacity="0.7"/>
-        <path d="M16,8 Q24,16 16,24" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round"/>
-        <path d="M20,4 Q32,16 20,28" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+      <g transform="translate(24 72)">
+        <rect width="500" height="82" rx="10" fill="#FFFFFF" stroke="#D7D8D2"/>
+        <text x="16" y="25"
+              font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+              font-size="15" font-weight="700" fill="#167D72">00:12.40 → 00:15.82</text>
+        <text x="16" y="52"
+              font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+              font-size="18" fill="#383D39">Build one line at a time.</text>
+        <text x="252" y="52"
+              font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
+              font-size="18" font-weight="650" fill="#111311">逐行打磨，让表达自然落地。</text>
+        <path d="M226 42 L240 42 M234 36 L240 42 L234 48" fill="none" stroke="#FF7A59" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </g>
-      <text x="78" y="30" text-anchor="middle"
-            font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
-            font-size="11" font-weight="600" fill="#F0F4F8">配音</text>
-      <text x="78" y="46" text-anchor="middle"
-            font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
-            font-size="10" fill="#64748B">声音克隆</text>
+
+      <g transform="translate(24 168)">
+        <rect width="500" height="92" rx="10" fill="#1C211E"/>
+        <circle cx="28" cy="46" r="18" fill="#2DD4BF"/>
+        <path d="M23 37 L23 55 L37 46 Z" fill="#111311"/>
+
+        <g transform="translate(64 19)" fill="#FF7A59">
+          <rect x="0" y="20" width="5" height="14" rx="2"/>
+          <rect x="12" y="12" width="5" height="30" rx="2"/>
+          <rect x="24" y="5" width="5" height="44" rx="2"/>
+          <rect x="36" y="16" width="5" height="22" rx="2"/>
+          <rect x="48" y="9" width="5" height="36" rx="2"/>
+          <rect x="60" y="18" width="5" height="18" rx="2"/>
+          <rect x="72" y="2" width="5" height="50" rx="2"/>
+          <rect x="84" y="13" width="5" height="28" rx="2"/>
+          <rect x="96" y="7" width="5" height="40" rx="2"/>
+          <rect x="108" y="20" width="5" height="14" rx="2"/>
+          <rect x="120" y="11" width="5" height="32" rx="2"/>
+          <rect x="132" y="17" width="5" height="20" rx="2"/>
+          <rect x="144" y="4" width="5" height="46" rx="2"/>
+          <rect x="156" y="14" width="5" height="26" rx="2"/>
+          <rect x="168" y="9" width="5" height="36" rx="2"/>
+          <rect x="180" y="19" width="5" height="16" rx="2"/>
+          <rect x="192" y="12" width="5" height="30" rx="2"/>
+          <rect x="204" y="6" width="5" height="42" rx="2"/>
+          <rect x="216" y="16" width="5" height="22" rx="2"/>
+          <rect x="228" y="10" width="5" height="34" rx="2"/>
+        </g>
+
+        <text x="320" y="39"
+              font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+              font-size="15" fill="#A8AEA8">VOICE PREVIEW</text>
+        <text x="320" y="64"
+              font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif"
+              font-size="17" font-weight="700" fill="#F5F2EA">中文配音已就绪</text>
+      </g>
+    </g>
+
+    <g id="workflow-line" transform="translate(596 354)">
+      <line x1="10" y1="12" x2="524" y2="12" stroke="#343A35" stroke-width="2"/>
+      <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="700">
+        <circle cx="10" cy="12" r="8" fill="#2DD4BF"/>
+        <text x="10" y="42" text-anchor="middle" fill="#A8AEA8">INPUT</text>
+
+        <circle cx="140" cy="12" r="8" fill="#F7C948"/>
+        <text x="140" y="42" text-anchor="middle" fill="#A8AEA8">CAPTION</text>
+
+        <circle cx="268" cy="12" r="8" fill="#FF7A59"/>
+        <text x="268" y="42" text-anchor="middle" fill="#A8AEA8">TRANSLATE</text>
+
+        <circle cx="398" cy="12" r="8" fill="#2DD4BF"/>
+        <text x="398" y="42" text-anchor="middle" fill="#A8AEA8">VOICE</text>
+
+        <circle cx="524" cy="12" r="8" fill="#F5F2EA"/>
+        <text x="524" y="42" text-anchor="middle" fill="#A8AEA8">EXPORT</text>
+      </g>
     </g>
   </g>
-
-  <!-- Bottom accent line -->
-  <rect x="0" y="416" width="1200" height="4" fill="url(#teal-grad)" opacity="0.6"/>
 </svg>

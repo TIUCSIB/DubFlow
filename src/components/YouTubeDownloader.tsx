@@ -3,9 +3,14 @@
 import { useCallback, useState } from "react";
 import type { SubtitleEntry, TranslatedEntry } from "@/types";
 import { Button, Input } from "@heroui/react";
-import { AlertCircle, Captions, Download, FileVideo, Music, Link, CheckCircle2 } from "lucide-react";
+import { AlertCircle, Captions, Download, Link } from "lucide-react";
 import { getApiKeyHeaders } from "@/lib/api-key-storage";
-
+import YouTubeMediaDownloads, { type MediaFormat } from "@/components/YouTubeMediaDownloads";
+import YouTubeVideoSummary from "@/components/YouTubeVideoSummary";
+import {
+  YouTubeAccessNotice,
+  YouTubeSuccessNotice,
+} from "@/components/YouTubeStatusNotice";
 interface CaptionTrack {
   languageCode: string;
   languageName: string;
@@ -19,23 +24,19 @@ interface VideoInfo {
   author: string;
   duration: string;
   thumbnail: string;
+  publishedAt?: string | null;
+  viewCount?: number | null;
   captionTracks: CaptionTrack[];
-  formats: { itag: number; qualityLabel: string; container: string }[];
-  audioFormats: { itag: number; qualityLabel: string; container: string }[];
+  formats: MediaFormat[];
+  audioFormats: MediaFormat[];
+  accessLimited?: boolean;
+  accessMessage?: string;
 }
 
 interface YouTubeDownloaderProps {
   onSubtitleLoad: (original: SubtitleEntry[], translated: TranslatedEntry[]) => void;
   onError: (message: string) => void;
 }
-
-function formatDuration(seconds: string): string {
-  const total = parseInt(seconds, 10);
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
-
 function parseSrtToEntries(srt: string): SubtitleEntry[] {
   const blocks = srt.trim().split(/\n\s*\n/);
   return blocks
@@ -57,13 +58,11 @@ function parseSrtToEntries(srt: string): SubtitleEntry[] {
     })
     .filter(Boolean) as SubtitleEntry[];
 }
-
 function srtTimeToMs(time: string): number {
   const [h, m, rest] = time.split(":");
   const [s, ms] = rest.split(",");
   return parseInt(h) * 3600000 + parseInt(m) * 60000 + parseInt(s) * 1000 + parseInt(ms);
 }
-
 async function readTranslateStream(response: Response): Promise<TranslatedEntry[]> {
   const reader = response.body?.getReader();
   if (!reader) throw new Error("无法读取服务端响应");
@@ -93,19 +92,6 @@ async function readTranslateStream(response: Response): Promise<TranslatedEntry[
   }
   return resultData.translatedEntries;
 }
-
-function SuccessToast({ message, onDismiss }: { message: string; onDismiss: () => void }) {
-  return (
-    <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300">
-      <CheckCircle2 className="h-4 w-4 shrink-0" />
-      <span className="flex-1">{message}</span>
-      <button onClick={onDismiss} className="shrink-0 text-emerald-500 hover:text-emerald-700">
-        &times;
-      </button>
-    </div>
-  );
-}
-
 export default function YouTubeDownloader({ onSubtitleLoad, onError }: YouTubeDownloaderProps) {
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
@@ -113,8 +99,6 @@ export default function YouTubeDownloader({ onSubtitleLoad, onError }: YouTubeDo
   const [downloadingSubtitle, setDownloadingSubtitle] = useState<string | null>(null);
   const [loadingToEditor, setLoadingToEditor] = useState(false);
   const [loadingToEditorStatus, setLoadingToEditorStatus] = useState("");
-  const [downloadingVideo, setDownloadingVideo] = useState(false);
-  const [downloadingAudio, setDownloadingAudio] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
 
   const showSuccess = useCallback((msg: string) => {
@@ -209,41 +193,6 @@ export default function YouTubeDownloader({ onSubtitleLoad, onError }: YouTubeDo
     [videoInfo, onError, showSuccess],
   );
 
-  const handleDownloadMedia = useCallback(
-    async (type: "video" | "audio") => {
-      if (!videoInfo) return;
-      const setPending = type === "video" ? setDownloadingVideo : setDownloadingAudio;
-      setPending(true);
-      onError("");
-      try {
-        const urlParam = encodeURIComponent(url.trim());
-        const response = await fetch(`/api/youtube/download?url=${urlParam}&type=${type}`);
-        if (!response.ok) {
-          const data = await response.json().catch(() => null);
-          throw new Error(data?.error || "下载失败");
-        }
-        const blob = await response.blob();
-        if (blob.size === 0) {
-          throw new Error("下载的文件为空，请重试");
-        }
-        const ext = type === "audio" ? "mp3" : "mp4";
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = `${videoInfo.title}.${ext}`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(a.href);
-        showSuccess(`${type === "audio" ? "音频" : "视频"}文件已下载`);
-      } catch (error: unknown) {
-        onError(error instanceof Error ? error.message : "下载失败");
-      } finally {
-        setPending(false);
-      }
-    },
-    [videoInfo, url, onError, showSuccess],
-  );
-
   return (
     <div className="space-y-4">
       <div className="flex gap-2">
@@ -271,23 +220,24 @@ export default function YouTubeDownloader({ onSubtitleLoad, onError }: YouTubeDo
         </Button>
       </div>
 
-      {successMsg && <SuccessToast message={successMsg} onDismiss={() => setSuccessMsg("")} />}
+      {successMsg && (
+        <YouTubeSuccessNotice message={successMsg} onDismiss={() => setSuccessMsg("")} />
+      )}
 
       {videoInfo && (
         <div className="fade-in-up space-y-4">
-          <div className="flex gap-4 rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800/50">
-            {videoInfo.thumbnail && (
-              <img src={videoInfo.thumbnail} alt={videoInfo.title} className="h-24 w-40 shrink-0 rounded-md object-cover" />
-            )}
-            <div className="min-w-0 flex-1">
-              <h3 className="line-clamp-2 text-sm font-medium text-gray-900 dark:text-white">{videoInfo.title}</h3>
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                {videoInfo.author} &middot; {formatDuration(videoInfo.duration)}
-              </p>
-            </div>
-          </div>
+          <YouTubeVideoSummary
+            title={videoInfo.title}
+            author={videoInfo.author}
+            duration={videoInfo.duration}
+            thumbnail={videoInfo.thumbnail}
+            publishedAt={videoInfo.publishedAt}
+            viewCount={videoInfo.viewCount}
+          />
 
-          {videoInfo.captionTracks.length > 0 && (
+          {videoInfo.accessLimited && <YouTubeAccessNotice message={videoInfo.accessMessage} />}
+
+          {!videoInfo.accessLimited && videoInfo.captionTracks.length > 0 && (
             <div>
               <h4 className="mb-2 flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-gray-300">
                 <Captions className="h-3.5 w-3.5" />
@@ -328,41 +278,21 @@ export default function YouTubeDownloader({ onSubtitleLoad, onError }: YouTubeDo
             </div>
           )}
 
-          {videoInfo.captionTracks.length === 0 && (
+          {!videoInfo.accessLimited && videoInfo.captionTracks.length === 0 && (
             <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
               <AlertCircle className="h-4 w-4 shrink-0" />
               该视频没有可用的字幕轨道
             </div>
           )}
 
-          <div>
-            <h4 className="mb-2 flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-gray-300">
-              <Download className="h-3.5 w-3.5" />
-              下载媒体
-            </h4>
-            <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                className="flex-1"
-                onPress={() => void handleDownloadMedia("video")}
-                isPending={downloadingVideo}
-                isDisabled={downloadingVideo || downloadingAudio}
-              >
-                <FileVideo className="h-4 w-4" />
-                {downloadingVideo ? "下载中..." : "下载视频"}
-              </Button>
-              <Button
-                variant="secondary"
-                className="flex-1"
-                onPress={() => void handleDownloadMedia("audio")}
-                isPending={downloadingAudio}
-                isDisabled={downloadingVideo || downloadingAudio}
-              >
-                <Music className="h-4 w-4" />
-                {downloadingAudio ? "下载中..." : "下载音频"}
-              </Button>
-            </div>
-          </div>
+          {!videoInfo.accessLimited && (
+            <YouTubeMediaDownloads
+              sourceUrl={url}
+              videoInfo={videoInfo}
+              onError={onError}
+              onSuccess={showSuccess}
+            />
+          )}
         </div>
       )}
     </div>

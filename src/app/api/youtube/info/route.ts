@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getInnertube, extractVideoId } from "@/lib/youtube";
+import { extractVideoId, getInnertube, getYouTubeOEmbedInfo } from "@/lib/youtube";
 
 export const runtime = "nodejs";
 
@@ -20,20 +20,82 @@ interface VideoFormatInfo {
   contentLength?: number;
 }
 
+type YouTubeVideoInfo = Awaited<
+  ReturnType<Awaited<ReturnType<typeof getInnertube>>["getBasicInfo"]>
+>;
+
+interface VideoMetadata {
+  publishedAt: string | null;
+  viewCount: number | null;
+}
+
+function getVideoMetadata(info: YouTubeVideoInfo): VideoMetadata {
+  const microformat = info.page[0]?.microformat;
+  const basicViewCount = info.basic_info.view_count;
+
+  if (!microformat) {
+    return { publishedAt: null, viewCount: basicViewCount ?? null };
+  }
+
+  const uploadDate =
+    "upload_date" in microformat && typeof microformat.upload_date === "string"
+      ? microformat.upload_date
+      : null;
+  const publishDate =
+    "publish_date" in microformat && typeof microformat.publish_date === "string"
+      ? microformat.publish_date
+      : null;
+  const microformatViewCount =
+    "view_count" in microformat && typeof microformat.view_count === "number"
+      ? microformat.view_count
+      : null;
+
+  return {
+    publishedAt: uploadDate || publishDate,
+    viewCount: basicViewCount ?? microformatViewCount,
+  };
+}
+
+function getInfoCompletenessScore(info: YouTubeVideoInfo): number {
+  const basic = info.basic_info;
+  const metadata = getVideoMetadata(info);
+
+  return (
+    Number(Boolean(basic.title)) +
+    Number(Boolean(basic.author || basic.channel?.name)) * 2 +
+    Number(Boolean(basic.duration)) +
+    Number(metadata.viewCount !== null) * 2 +
+    Number(metadata.publishedAt !== null) * 2 +
+    Number((info.captions?.caption_tracks?.length ?? 0) > 0) +
+    Number((info.streaming_data?.formats.length ?? 0) > 0)
+  );
+}
+
 /**
  * 依次尝试不同客户端获取视频信息，直到成功为止。
  * 不同客户端对 bot 检测的严格程度不同，TV 和 IOS 通常更宽松。
  */
-async function fetchVideoInfo(innertube: Awaited<ReturnType<typeof getInnertube>>, videoId: string) {
+async function fetchVideoInfo(
+  innertube: Awaited<ReturnType<typeof getInnertube>>,
+  videoId: string,
+): Promise<YouTubeVideoInfo> {
   const clients = ["TV", "IOS", "ANDROID", "WEB"] as const;
   let lastError: unknown = null;
+  let bestInfo: YouTubeVideoInfo | null = null;
+  let bestScore = -1;
 
   for (const client of clients) {
     try {
       const info = await innertube.getBasicInfo(videoId, { client });
       const playability = info.playability_status;
       if (playability && playability.status === "OK") {
-        return info;
+        const score = getInfoCompletenessScore(info);
+        if (score > bestScore) {
+          bestInfo = info;
+          bestScore = score;
+        }
+        if (score >= 10) break;
+        continue;
       }
       lastError = new Error(playability?.reason || `客户端 ${client} 无法播放该视频`);
     } catch (error) {
@@ -41,7 +103,35 @@ async function fetchVideoInfo(innertube: Awaited<ReturnType<typeof getInnertube>
     }
   }
 
-  throw lastError;
+  if (bestInfo) return bestInfo;
+  throw lastError ?? new Error("无法获取视频信息");
+}
+
+function isBotVerificationError(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return normalized.includes("not a bot")
+    || normalized.includes("confirm you")
+    || normalized.includes("sign in")
+    || message.includes("\u804a\u5929\u673a\u5668\u4eba")
+    || message.includes("\u8bf7\u767b\u5f55");
+}
+
+async function createLimitedVideoInfo(videoId: string) {
+  const basic = await getYouTubeOEmbedInfo(videoId);
+  return {
+    videoId,
+    title: basic.title,
+    author: basic.author_name,
+    duration: "0",
+    thumbnail: basic.thumbnail_url,
+    publishedAt: null,
+    viewCount: null,
+    captionTracks: [],
+    formats: [],
+    audioFormats: [],
+    accessLimited: true,
+    accessMessage: "YouTube \u6682\u65f6\u9650\u5236\u4e86\u6b64\u89c6\u9891\u7684\u533f\u540d\u8bbf\u95ee\uff0c\u5df2\u52a0\u8f7d\u57fa\u7840\u4fe1\u606f\u3002\u5b57\u5e55\u548c\u5a92\u4f53\u4e0b\u8f7d\u6682\u65f6\u4e0d\u53ef\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u6216\u66f4\u6362\u7f51\u7edc\u3002",
+  };
 }
 
 export async function GET(request: NextRequest) {
@@ -72,7 +162,12 @@ export async function GET(request: NextRequest) {
     }));
 
     const streamingData = info.streaming_data;
-    const formats: VideoFormatInfo[] = (streamingData?.formats ?? [])
+    const formats: VideoFormatInfo[] = [
+      ...(streamingData?.formats ?? []),
+      ...(streamingData?.adaptive_formats ?? []).filter(
+        (format) => format.has_video && format.mime_type?.startsWith("video/mp4"),
+      ),
+    ]
       .map((f) => ({
         itag: f.itag,
         qualityLabel: f.quality_label || "unknown",
@@ -82,7 +177,18 @@ export async function GET(request: NextRequest) {
         bitrate: f.bitrate || 0,
         contentLength: f.content_length,
       }))
-      .sort((a, b) => b.bitrate - a.bitrate);
+      .filter((format, index, all) =>
+        all.findIndex((candidate) => candidate.itag === format.itag) === index,
+      )
+      .sort((a, b) => {
+        const qualityA = parseInt(a.qualityLabel, 10) || 0;
+        const qualityB = parseInt(b.qualityLabel, 10) || 0;
+        return qualityB - qualityA || b.bitrate - a.bitrate;
+      })
+      .filter(
+        (format, index, all) =>
+          all.findIndex((candidate) => candidate.qualityLabel === format.qualityLabel) === index,
+      );
 
     const audioFormats: VideoFormatInfo[] = (streamingData?.adaptive_formats ?? [])
       .filter((f) => f.has_audio && !f.has_video)
@@ -100,6 +206,7 @@ export async function GET(request: NextRequest) {
     const thumbnails = basic.thumbnail ?? [];
     const thumbnail =
       thumbnails.length > 0 ? thumbnails[thumbnails.length - 1].url : "";
+    const { publishedAt, viewCount } = getVideoMetadata(info);
 
     return NextResponse.json({
       videoId: basic.id,
@@ -107,13 +214,23 @@ export async function GET(request: NextRequest) {
       author: basic.author || basic.channel?.name || "",
       duration: String(basic.duration || 0),
       thumbnail,
-      viewCount: basic.view_count,
+      publishedAt,
+      viewCount,
       captionTracks,
       formats,
       audioFormats,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "获取视频信息失败";
+    if (isBotVerificationError(message)) {
+      try {
+        return NextResponse.json(await createLimitedVideoInfo(videoId));
+      } catch {
+        return NextResponse.json({
+          error: "YouTube \u6682\u65f6\u9650\u5236\u4e86\u6b64\u89c6\u9891\u7684\u533f\u540d\u8bbf\u95ee\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u6216\u66f4\u6362\u7f51\u7edc\u3002",
+        }, { status: 503 });
+      }
+    }
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

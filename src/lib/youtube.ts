@@ -148,6 +148,23 @@ export async function getInnertube(): Promise<Innertube> {
   return instance;
 }
 
+export interface YouTubeOEmbedInfo {
+  title: string;
+  author_name: string;
+  thumbnail_url: string;
+}
+
+export async function getYouTubeOEmbedInfo(videoId: string): Promise<YouTubeOEmbedInfo> {
+  const endpoint = new URL("https://www.youtube.com/oembed");
+  endpoint.searchParams.set("url", `https://www.youtube.com/watch?v=${videoId}`);
+  endpoint.searchParams.set("format", "json");
+  const response = await nativeFetch(endpoint);
+  if (!response.ok) {
+    throw new Error("\u65e0\u6cd5\u83b7\u53d6\u89c6\u9891\u57fa\u7840\u4fe1\u606f");
+  }
+  return response.json() as Promise<YouTubeOEmbedInfo>;
+}
+
 /**
  * 从 YouTube 视频链接中提取 videoId。
  */

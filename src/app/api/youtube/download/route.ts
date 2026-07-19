@@ -1,74 +1,109 @@
-﻿import { NextRequest, NextResponse } from "next/server";
-import { execFile } from "child_process";
-import { promisify } from "util";
-import { getInnertube, extractVideoId } from "@/lib/youtube";
+import { createReadStream } from "fs";
+import { Readable } from "stream";
+import { NextRequest, NextResponse } from "next/server";
+import {
+  cleanupDownloadJob,
+  getDownloadJob,
+  getDownloadJobFile,
+  startDownloadJob,
+} from "@/lib/youtube-download";
+import { extractVideoId } from "@/lib/youtube";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-const execFileAsync = promisify(execFile);
+const AUDIO_BITRATES = new Set([64, 128, 192, 256, 320]);
 
-export async function GET(request: NextRequest) {
-  const url = request.nextUrl.searchParams.get("url");
-  const type = request.nextUrl.searchParams.get("type") || "video";
+interface DownloadRequestBody {
+  url?: string;
+  type?: "audio" | "video";
+  title?: string;
+  duration?: number;
+  audioBitrate?: number;
+  videoItag?: number;
+}
 
+export async function POST(request: NextRequest) {
+  const body = (await request.json().catch(() => null)) as DownloadRequestBody | null;
+  const url = body?.url?.trim();
+  const type = body?.type;
   if (!url) {
-    return NextResponse.json({ error: "请提供 YouTube 视频链接" }, { status: 400 });
+    return NextResponse.json({ error: "\u8bf7\u63d0\u4f9b YouTube \u89c6\u9891\u94fe\u63a5" }, { status: 400 });
+  }
+  if (type !== "audio" && type !== "video") {
+    return NextResponse.json({ error: "\u4e0b\u8f7d\u7c7b\u578b\u65e0\u6548" }, { status: 400 });
   }
 
   const videoId = extractVideoId(url);
   if (!videoId) {
-    return NextResponse.json({ error: "无效的 YouTube 视频链接" }, { status: 400 });
+    return NextResponse.json({ error: "\u65e0\u6548\u7684 YouTube \u89c6\u9891\u94fe\u63a5" }, { status: 400 });
+  }
+  const audioBitrate = Number(body?.audioBitrate);
+  const videoItag = Number(body?.videoItag);
+  if (type === "audio" && !AUDIO_BITRATES.has(audioBitrate)) {
+    return NextResponse.json({ error: "\u4e0d\u652f\u6301\u7684\u97f3\u9891\u7801\u7387" }, { status: 400 });
+  }
+  if (type === "video" && (!Number.isInteger(videoItag) || videoItag <= 0)) {
+    return NextResponse.json({ error: "\u8bf7\u9009\u62e9\u6709\u6548\u7684\u89c6\u9891\u6e05\u6670\u5ea6" }, { status: 400 });
   }
 
-  try {
-    const innertube = await getInnertube();
-    const info = await innertube.getBasicInfo(videoId, { client: "IOS" });
-    const title =
-      (info.basic_info.title || "video")
-        .replace(/[^\w\s\u4e00-\u9fff-]/g, "")
-        .trim() || "video";
+  const job = startDownloadJob({
+    videoId,
+    type,
+    title: body?.title?.trim() || "dubflow-download",
+    duration: Math.max(0, Number(body?.duration) || 0),
+    audioBitrate: type === "audio" ? audioBitrate : undefined,
+    videoItag: type === "video" ? videoItag : undefined,
+  });
+  return NextResponse.json({ jobId: job.id }, { status: 202 });
+}
 
-    const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
-    const ext = type === "audio" ? "mp3" : "mp4";
-    const filename = `${title}.${ext}`;
+export async function GET(request: NextRequest) {
+  const jobId = request.nextUrl.searchParams.get("jobId");
+  if (!jobId) {
+    return NextResponse.json({ error: "\u7f3a\u5c11\u4e0b\u8f7d\u4efb\u52a1\u7f16\u53f7" }, { status: 400 });
+  }
 
-    // Use yt-dlp with --impersonate to bypass bot detection
-    const formatArg = type === "audio" ? "bestaudio" : "best[ext=mp4]/best";
-
-    const { stdout, stderr } = await execFileAsync(
-      "yt-dlp",
-      [
-        "--impersonate", "chrome",
-        "-f", formatArg,
-        "-o", "-",  // output to stdout
-        "--no-playlist",
-        "--no-warnings",
-        "--no-check-certificates",
-        "--newline",
-        ytUrl,
-      ],
-      {
-        timeout: 300000, // 5 minutes
-        maxBuffer: 50 * 1024 * 1024, // 50MB buffer
-        encoding: "buffer", // get raw bytes
-      },
-    );
-
-    if (!stdout || stdout.length === 0) {
-      throw new Error(stderr?.toString() || "Download produced no output");
+  if (request.nextUrl.searchParams.get("file") === "1") {
+    const file = getDownloadJobFile(jobId);
+    if (!file) {
+      return NextResponse.json({
+        error: "\u6587\u4ef6\u5c1a\u672a\u51c6\u5907\u5b8c\u6210\u6216\u5df2\u7ecf\u8fc7\u671f",
+      }, { status: 409 });
     }
+    const fileStream = createReadStream(file.path);
+    const webStream = Readable.toWeb(fileStream) as ReadableStream<Uint8Array>;
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
+      void cleanupDownloadJob(jobId);
+    };
+    fileStream.once("close", cleanup);
+    fileStream.once("error", cleanup);
 
-    const contentType = type === "audio" ? "audio/mpeg" : "video/mp4";
-
-    return new NextResponse(stdout, {
+    const encodedFilename = encodeURIComponent(file.filename);
+    const extension = file.filename.split(".").pop() || "bin";
+    return new NextResponse(webStream, {
       headers: {
-        "Content-Type": contentType,
-        "Content-Disposition": `attachment; filename="${encodeURIComponent(filename)}"`,
-        "Content-Length": String(stdout.length),
+        "Content-Type": file.contentType,
+        "Content-Disposition": `attachment; filename="dubflow-download.${extension}"; filename*=UTF-8''${encodedFilename}`,
+        "Content-Length": String(file.size),
+        "Cache-Control": "no-store",
       },
     });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "下载失败";
-    return NextResponse.json({ error: message }, { status: 500 });
   }
+
+  const job = getDownloadJob(jobId);
+  if (!job) {
+    return NextResponse.json({
+      error: "\u4e0b\u8f7d\u4efb\u52a1\u4e0d\u5b58\u5728\u6216\u5df2\u7ecf\u8fc7\u671f",
+    }, { status: 404 });
+  }
+  return NextResponse.json({
+    ...job,
+    downloadUrl: job.status === "ready"
+      ? `/api/youtube/download?jobId=${job.id}&file=1`
+      : undefined,
+  });
 }
