@@ -1,4 +1,9 @@
-import type { ASRLanguage, SubtitleEntry, TranslatedEntry } from "@/types";
+import type {
+  ASRLanguage,
+  SubtitleEntry,
+  TargetLanguage,
+  TranslatedEntry,
+} from "@/types";
 import { formatTimestamp } from "@/lib/subtitle";
 import { getApiKeyHeaders, getDeepLApiKey, getTranslationProvider } from "@/lib/api-key-storage";
 import { readProcessResponse } from "@/lib/process-response";
@@ -104,6 +109,7 @@ export async function extractAudioFromVideo(
 export async function processAudioInput(
   payload: AudioPayload,
   sourceLanguage: ASRLanguage,
+  targetLanguage: TargetLanguage,
   onProgress?: AudioProcessProgressHandler,
 ): Promise<AudioProcessResult> {
   onProgress?.({
@@ -120,7 +126,11 @@ export async function processAudioInput(
       total: 1,
       percent: 30,
     });
-    const result = await requestAudioProcess(payload, sourceLanguage);
+    const result = await requestAudioProcess(
+      payload,
+      sourceLanguage,
+      targetLanguage,
+    );
     onProgress?.({
       stage: "processing",
       current: 1,
@@ -143,7 +153,11 @@ export async function processAudioInput(
     });
 
     try {
-      const result = await requestAudioProcess(chunks[index], sourceLanguage);
+      const result = await requestAudioProcess(
+        chunks[index],
+        sourceLanguage,
+        targetLanguage,
+      );
       const startMs = Math.round(
         (chunks[index].startSample / ASR_SAMPLE_RATE) * 1000,
       );
@@ -191,6 +205,7 @@ function getProcessingPercent(current: number, total: number): number {
 async function requestAudioProcess(
   payload: AudioPayload,
   sourceLanguage: ASRLanguage,
+  targetLanguage: TargetLanguage,
 ): Promise<AudioProcessResult> {
   const translationProvider = getTranslationProvider();
   const response = await fetch("/api/process", {
@@ -202,6 +217,7 @@ async function requestAudioProcess(
       audioFormat: payload.audioFormat,
       autoTranslate: true,
       sourceLanguage,
+      targetLanguage,
       translationProvider,
       deeplApiKey: translationProvider === "deepl" ? getDeepLApiKey() : undefined,
     }),

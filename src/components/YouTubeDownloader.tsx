@@ -1,7 +1,11 @@
 ﻿"use client";
 
 import { useCallback, useState } from "react";
-import type { SubtitleEntry, TranslatedEntry } from "@/types";
+import type {
+  SubtitleEntry,
+  TargetLanguage,
+  TranslatedEntry,
+} from "@/types";
 import { Button, Input, toast } from "@heroui/react";
 import { AlertCircle, Captions, Download, Link } from "lucide-react";
 import { getApiKeyHeaders } from "@/lib/api-key-storage";
@@ -31,6 +35,7 @@ interface VideoInfo {
 }
 
 interface YouTubeDownloaderProps {
+  targetLanguage: TargetLanguage;
   onSubtitleLoad: (original: SubtitleEntry[], translated: TranslatedEntry[]) => void;
   onError: (message: string) => void;
 }
@@ -89,7 +94,11 @@ async function readTranslateStream(response: Response): Promise<TranslatedEntry[
   }
   return resultData.translatedEntries;
 }
-export default function YouTubeDownloader({ onSubtitleLoad, onError }: YouTubeDownloaderProps) {
+export default function YouTubeDownloader({
+  targetLanguage,
+  onSubtitleLoad,
+  onError,
+}: YouTubeDownloaderProps) {
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null);
@@ -144,6 +153,7 @@ export default function YouTubeDownloader({ onSubtitleLoad, onError }: YouTubeDo
             srtContent: data.srtContent,
             autoTranslate: true,
             sourceLanguage: "auto",
+            targetLanguage,
           }),
         });
         if (!translateResponse.ok) {
@@ -162,7 +172,7 @@ export default function YouTubeDownloader({ onSubtitleLoad, onError }: YouTubeDo
         setLoadingToEditorStatus("");
       }
     },
-    [onSubtitleLoad, onError],
+    [onSubtitleLoad, onError, targetLanguage],
   );
 
   const handleDownloadSubtitle = useCallback(

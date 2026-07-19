@@ -9,7 +9,12 @@ import {
   translateSingleWithProvider,
 } from "@/lib/translation-providers";
 import { parseSRT } from "@/lib/subtitle";
-import type { SubtitleEntry, TranslatedEntry, TranslationProvider } from "@/types";
+import type {
+  SubtitleEntry,
+  TargetLanguage,
+  TranslatedEntry,
+  TranslationProvider,
+} from "@/types";
 
 const TRANSLATION_CONCURRENCY = 4;
 
@@ -30,6 +35,7 @@ export async function POST(req: NextRequest) {
       srtContent,
       autoTranslate,
       sourceLanguage,
+      targetLanguage,
       translationProvider,
       deeplApiKey,
     } = body as {
@@ -39,6 +45,7 @@ export async function POST(req: NextRequest) {
       srtContent?: string;
       autoTranslate?: boolean;
       sourceLanguage?: ASRLanguage;
+      targetLanguage?: TargetLanguage;
       translationProvider?: TranslationProvider;
       deeplApiKey?: string;
     };
@@ -99,8 +106,11 @@ export async function POST(req: NextRequest) {
       }
 
       const detectedLanguage = resolveSourceLanguage(language, sourceEntries);
+      const selectedTargetLanguage =
+        normalizeTargetLanguage(targetLanguage) ??
+        getOppositeLanguage(detectedLanguage);
       const sourceLang = detectedLanguage === "zh" ? "Chinese" : "English";
-      const targetLang = detectedLanguage === "zh" ? "English" : "Chinese";
+      const targetLang = selectedTargetLanguage === "zh" ? "Chinese" : "English";
       const batchSize = getBatchSize(sourceEntries.length);
       const batches = chunkEntries(sourceEntries, batchSize);
       const totalBatches = batches.length;
@@ -113,28 +123,47 @@ export async function POST(req: NextRequest) {
             controller.enqueue(encoder.encode(JSON.stringify({ type: "progress", current, total }) + "\n"));
           };
 
-          const translatedByIndex = new Map<number, string>();
-          let completedBatches = 0;
+          let translatedEntries: TranslatedEntry[];
 
-          const translatedBatches = await mapWithConcurrency(
-            batches,
-            TRANSLATION_CONCURRENCY,
-            async (batch) => {
-              const result = await translateBatchWithFallback(batch, sourceLang, targetLang, apiKey, translationProvider, deeplApiKey);
-              completedBatches++;
-              sendProgress(completedBatches, totalBatches);
-              return result;
-            },
-          );
+          if (selectedTargetLanguage === detectedLanguage) {
+            sendProgress(1, 1);
+            translatedEntries = sourceEntries.map((entry) => ({
+              ...entry,
+              translatedText: entry.text,
+            }));
+          } else {
+            const translatedByIndex = new Map<number, string>();
+            let completedBatches = 0;
 
-          translatedBatches
-            .flat()
-            .forEach((entry) => translatedByIndex.set(entry.index, entry.translatedText));
+            const translatedBatches = await mapWithConcurrency(
+              batches,
+              TRANSLATION_CONCURRENCY,
+              async (batch) => {
+                const result = await translateBatchWithFallback(
+                  batch,
+                  sourceLang,
+                  targetLang,
+                  apiKey,
+                  translationProvider,
+                  deeplApiKey,
+                );
+                completedBatches++;
+                sendProgress(completedBatches, totalBatches);
+                return result;
+              },
+            );
 
-          const translatedEntries = sourceEntries.map((entry) => ({
-            ...entry,
-            translatedText: translatedByIndex.get(entry.index) || entry.text,
-          }));
+            translatedBatches
+              .flat()
+              .forEach((entry) =>
+                translatedByIndex.set(entry.index, entry.translatedText),
+              );
+
+            translatedEntries = sourceEntries.map((entry) => ({
+              ...entry,
+              translatedText: translatedByIndex.get(entry.index) || entry.text,
+            }));
+          }
 
           controller.enqueue(encoder.encode(JSON.stringify({
             type: "complete",
@@ -178,6 +207,16 @@ export async function GET() {
 
 function normalizeLanguage(language?: ASRLanguage): ASRLanguage {
   return language === "zh" || language === "en" ? language : "auto";
+}
+
+function normalizeTargetLanguage(
+  language?: TargetLanguage,
+): TargetLanguage | undefined {
+  return language === "zh" || language === "en" ? language : undefined;
+}
+
+function getOppositeLanguage(language: "zh" | "en"): TargetLanguage {
+  return language === "zh" ? "en" : "zh";
 }
 
 function detectLanguage(entries: SubtitleEntry[]): "zh" | "en" | "mixed" {

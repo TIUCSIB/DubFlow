@@ -1,12 +1,18 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import type { ASRLanguage, SubtitleEntry, TranslatedEntry } from "@/types";
+import type {
+  ASRLanguage,
+  SubtitleEntry,
+  TargetLanguage,
+  TranslatedEntry,
+} from "@/types";
 import { Button, Card, Tabs } from "@heroui/react";
 import FileUploader from "@/components/FileUploader";
 import YouTubeDownloader from "@/components/YouTubeDownloader";
 import ProcessingProgress from "@/components/ProcessingProgress";
 import SourceLanguageSelect from "@/components/SourceLanguageSelect";
+import TargetLanguageSelect from "@/components/TargetLanguageSelect";
 import TranslationInputModeTabList from "@/components/TranslationInputModeTabList";
 import {
   type AudioProcessProgress,
@@ -41,6 +47,7 @@ export default function TranslationInputTabs({
   const [srtFile, setSrtFile] = useState<File | null>(null);
   const [srtContent, setSrtContent] = useState("");
   const [sourceLanguage, setSourceLanguage] = useState<ASRLanguage>("auto");
+  const [targetLanguage, setTargetLanguage] = useState<TargetLanguage>("zh");
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingProgress, setProcessingProgress] =
     useState<AudioProcessProgress | null>(null);
@@ -109,6 +116,7 @@ export default function TranslationInputTabs({
         const data = await processAudioInput(
           audioPayload,
           sourceLanguage,
+          targetLanguage,
           reportProgress,
         );
         onOriginalEntriesChange(data.entries);
@@ -129,6 +137,7 @@ export default function TranslationInputTabs({
             srtContent,
             autoTranslate: true,
             sourceLanguage,
+            targetLanguage,
             translationProvider,
             deeplApiKey: translationProvider === "deepl" ? getDeepLApiKey() : undefined,
           }),
@@ -195,6 +204,7 @@ export default function TranslationInputTabs({
     onTranslatedEntriesChange,
     sourceLanguage,
     srtContent,
+    targetLanguage,
   ]);
 
   const handleSelectionChange = useCallback(
@@ -234,6 +244,10 @@ export default function TranslationInputTabs({
               value={sourceLanguage}
               onChange={setSourceLanguage}
             />
+            <TargetLanguageSelect
+              value={targetLanguage}
+              onChange={setTargetLanguage}
+            />
             {audioFile && (
               <>
                 <Button
@@ -269,6 +283,10 @@ export default function TranslationInputTabs({
               value={sourceLanguage}
               onChange={setSourceLanguage}
             />
+            <TargetLanguageSelect
+              value={targetLanguage}
+              onChange={setTargetLanguage}
+            />
             {srtFile && srtContent && (
               <>
                 <Button
@@ -295,8 +313,13 @@ export default function TranslationInputTabs({
         </Tabs.Panel>
 
         <Tabs.Panel id="youtube" className="px-1">
-          <div className="mt-4">
+          <div className="mt-4 space-y-5">
+            <TargetLanguageSelect
+              value={targetLanguage}
+              onChange={setTargetLanguage}
+            />
             <YouTubeDownloader
+              targetLanguage={targetLanguage}
               onSubtitleLoad={(original, translated) => {
                 onOriginalEntriesChange(original);
                 onTranslatedEntriesChange(translated);

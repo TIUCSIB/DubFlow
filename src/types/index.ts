@@ -40,6 +40,8 @@ export interface TranslateRequest {
 
 export type ASRLanguage = "auto" | "zh" | "en";
 
+export type TargetLanguage = "zh" | "en";
+
 export interface ASRRequest {
   audioBase64: string;
   audioFormat: "mp3" | "wav";
