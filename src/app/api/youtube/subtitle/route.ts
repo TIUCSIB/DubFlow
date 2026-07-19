@@ -1,152 +1,128 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getInnertube } from "@/lib/youtube";
+import {
+  buildSubtitleUrls,
+  convertCaptionToSrt,
+} from "@/lib/youtube-subtitle";
 
 export const runtime = "nodejs";
 
-/**
- * 将 YouTube 字幕 XML（timedtext）转换为 SRT 格式。
- * 跳过文本内容为空的条目（YouTube 自动字幕中常见）。
- */
-function xmlToSrt(xml: string): string {
-  const textBlocks = xml.match(/<text[^>]*>[\s\S]*?<\/text>/g) || [];
-  const entries: string[] = [];
-  let seq = 0;
-
-  for (const block of textBlocks) {
-    const startMatch = block.match(/start="([\d.]+)"/);
-    const durMatch = block.match(/dur="([\d.]+)"/);
-    const textMatch = block.match(/>([\s\S]*?)<\/text>/);
-
-    const start = parseFloat(startMatch?.[1] || "0");
-    const dur = parseFloat(durMatch?.[1] || "0");
-    const end = start + dur;
-    const text = (textMatch?.[1] || "")
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .trim();
-
-    if (!text) continue;
-
-    seq++;
-    entries.push(
-      [
-        seq,
-        `${formatSrtTime(start)} --> ${formatSrtTime(end)}`,
-        text,
-        "",
-      ].join("\n"),
-    );
-  }
-
-  return entries.join("\n");
-}
-
-function formatSrtTime(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  const ms = Math.round((seconds % 1) * 1000);
-  return (
-    String(h).padStart(2, "0") +
-    ":" +
-    String(m).padStart(2, "0") +
-    ":" +
-    String(s).padStart(2, "0") +
-    "," +
-    String(ms).padStart(3, "0")
-  );
+interface YouTubeCaptionTrack {
+  language_code: string;
+  name?: { toString(): string };
+  base_url: string;
 }
 
 export async function GET(request: NextRequest) {
   const baseUrl = request.nextUrl.searchParams.get("baseUrl");
+  const videoId = request.nextUrl.searchParams.get("videoId");
   const lang = request.nextUrl.searchParams.get("lang") || "unknown";
+  const languageName = request.nextUrl.searchParams.get("languageName") || "";
 
-  if (!baseUrl) {
-    return NextResponse.json({ error: "缺少字幕轨道地址" }, { status: 400 });
-  }
-
-  try {
-    const srtUrl = baseUrl.includes("fmt=") ? baseUrl : `${baseUrl}&fmt=srv3`;
-    const response = await fetch(srtUrl);
-
-    if (!response.ok) {
-      throw new Error(`字幕下载失败 (${response.status})`);
-    }
-
-    const content = await response.text();
-
-    let srtContent: string;
-    if (content.includes("<transcript>") || content.includes("<text ")) {
-      srtContent = xmlToSrt(content);
-    } else {
-      srtContent = convertSrv3ToSrt(content);
-    }
-
-    return NextResponse.json({
-      srtContent,
-      language: lang,
-    });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "字幕下载失败";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
-}
-
-/**
- * 将 srv3（YouTube 的 XML 字幕格式）转换为 SRT。
- */
-function convertSrv3ToSrt(xml: string): string {
-  const pBlocks = xml.match(/<p[^>]*>[\s\S]*?<\/p>/g) || [];
-  const entries: string[] = [];
-  let seq = 0;
-
-  for (const block of pBlocks) {
-    const tMatch = block.match(/t="(\d+)"/);
-    const dMatch = block.match(/d="(\d+)"/);
-
-    const startMs = parseInt(tMatch?.[1] || "0", 10);
-    const durMs = parseInt(dMatch?.[1] || "0", 10);
-    const endMs = startMs + durMs;
-
-    const textContent = block
-      .replace(/<[^>]+>/g, "")
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .trim();
-
-    if (!textContent) continue;
-
-    seq++;
-    entries.push(
-      [
-        seq,
-        `${formatSrtTimeMs(startMs)} --> ${formatSrtTimeMs(endMs)}`,
-        textContent,
-        "",
-      ].join("\n"),
+  if (!baseUrl && !videoId) {
+    return NextResponse.json(
+      { error: "缺少字幕轨道地址或视频 ID" },
+      { status: 400 },
     );
   }
 
-  return entries.join("\n");
+  try {
+    if (videoId) {
+      const refreshedSrt = await fetchVideoTrackSrt(
+        videoId,
+        lang,
+        languageName,
+      );
+      if (refreshedSrt) return createSubtitleResponse(refreshedSrt, lang);
+    }
+
+    if (baseUrl) {
+      const originalSrt = await fetchTrackSrt(baseUrl);
+      if (originalSrt) return createSubtitleResponse(originalSrt, lang);
+    }
+
+    throw new Error("YouTube 没有返回可用的字幕内容，请稍后重试");
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "字幕下载失败";
+    return NextResponse.json({ error: message }, { status: 502 });
+  }
 }
 
-function formatSrtTimeMs(ms: number): string {
-  const h = Math.floor(ms / 3600000);
-  const m = Math.floor((ms % 3600000) / 60000);
-  const s = Math.floor((ms % 60000) / 1000);
-  const remainder = ms % 1000;
+async function fetchVideoTrackSrt(
+  videoId: string,
+  languageCode: string,
+  languageName: string,
+): Promise<string> {
+  const innertube = await getInnertube();
+  const clients = ["ANDROID", "IOS"] as const;
+
+  for (const client of clients) {
+    try {
+      const info = await innertube.getBasicInfo(videoId, { client });
+      const tracks = (info.captions?.caption_tracks ?? []) as YouTubeCaptionTrack[];
+      const track = selectCaptionTrack(tracks, languageCode, languageName);
+      if (!track) continue;
+
+      const srtContent = await fetchTrackSrt(track.base_url);
+      if (srtContent) return srtContent;
+    } catch {
+      continue;
+    }
+  }
+
+  return "";
+}
+
+function selectCaptionTrack(
+  tracks: YouTubeCaptionTrack[],
+  languageCode: string,
+  languageName: string,
+): YouTubeCaptionTrack | undefined {
+  const normalizedCode = normalizeLanguage(languageCode);
+  const normalizedName = languageName.trim().toLowerCase();
+
   return (
-    String(h).padStart(2, "0") +
-    ":" +
-    String(m).padStart(2, "0") +
-    ":" +
-    String(s).padStart(2, "0") +
-    "," +
-    String(remainder).padStart(3, "0")
+    tracks.find(
+      (track) => normalizeLanguage(track.language_code) === normalizedCode,
+    ) ??
+    tracks.find(
+      (track) => track.name?.toString().trim().toLowerCase() === normalizedName,
+    ) ??
+    tracks.find(
+      (track) =>
+        normalizeLanguage(track.language_code).split("-")[0] ===
+        normalizedCode.split("-")[0],
+    ) ??
+    (languageCode === "unknown" ? tracks[0] : undefined)
   );
+}
+
+function normalizeLanguage(value: string): string {
+  return value.trim().toLowerCase().replaceAll("_", "-");
+}
+
+async function fetchTrackSrt(baseUrl: string): Promise<string> {
+  for (const subtitleUrl of buildSubtitleUrls(baseUrl)) {
+    const response = await fetch(subtitleUrl, {
+      cache: "no-store",
+      headers: {
+        Accept: "text/xml, text/vtt, application/json, text/plain, */*",
+        "User-Agent": "Mozilla/5.0",
+      },
+    });
+
+    if (!response.ok) continue;
+
+    const srtContent = convertCaptionToSrt(await response.text());
+    if (srtContent.trim()) return srtContent;
+  }
+
+  return "";
+}
+
+function createSubtitleResponse(srtContent: string, language: string) {
+  return NextResponse.json({
+    srtContent: `${srtContent.trim()}\n`,
+    language,
+  });
 }

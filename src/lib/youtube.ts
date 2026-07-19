@@ -1,14 +1,14 @@
-import { Innertube } from "youtubei.js";
-import https from "https";
 import http from "http";
+import https from "https";
 import { URL } from "url";
+import { Innertube } from "youtubei.js";
 
 let instance: Innertube | null = null;
 
-/**
- * 将不同类型的 body 转换为 Buffer。
- */
-async function bodyToBuffer(body: NonNullable<RequestInit["body"]>): Promise<Buffer> {
+/** 将不同类型的请求正文转换为 Buffer。 */
+async function bodyToBuffer(
+  body: NonNullable<RequestInit["body"]>,
+): Promise<Buffer> {
   if (typeof body === "string") {
     return Buffer.from(body, "utf-8");
   }
@@ -17,6 +17,12 @@ async function bodyToBuffer(body: NonNullable<RequestInit["body"]>): Promise<Buf
   }
   if (body instanceof Uint8Array) {
     return Buffer.from(body);
+  }
+  if (body instanceof Blob) {
+    return Buffer.from(await body.arrayBuffer());
+  }
+  if (body instanceof URLSearchParams) {
+    return Buffer.from(body.toString(), "utf-8");
   }
   if (body instanceof ReadableStream) {
     const reader = body.getReader();
@@ -32,21 +38,18 @@ async function bodyToBuffer(body: NonNullable<RequestInit["body"]>): Promise<Buf
 }
 
 /**
- * 基于 Node.js 原生 https 模块的 fetch 实现。
- * Node.js 内置的 globalThis.fetch（undici）在某些代理/网络环境下
- * 会出现 TLS 握手失败，原生 https 模块则没有这个问题。
+ * 基于 Node.js 原生 HTTP 模块的 fetch 实现。
+ * 当前运行环境中的内置 fetch 可能出现 TLS 握手失败，因此保留该实现。
  */
 async function nativeFetch(
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<Response> {
-  // 从 input 和 init 中提取请求参数
   let url: string;
   let method = "GET";
-  let headers: Record<string, string> = {};
+  const headers: Record<string, string> = {};
   let body: RequestInit["body"] = undefined;
 
-  // 先从 input 提取信息
   if (typeof input === "string") {
     url = input;
   } else if (input instanceof URL) {
@@ -54,34 +57,43 @@ async function nativeFetch(
   } else if (input instanceof Request) {
     url = input.url;
     method = input.method || "GET";
-    input.headers.forEach((v, k) => { headers[k] = v; });
-    body = input.body as RequestInit["body"];
+    input.headers.forEach((value, key) => {
+      headers[key] = value;
+    });
+    body = input.body;
   } else {
     url = String(input);
   }
 
-  // init 中的值覆盖 input 中的值
   if (init) {
     if (init.method) method = init.method;
     if (init.body !== undefined) body = init.body;
     if (init.headers) {
-      if (init.headers instanceof Headers) {
-        init.headers.forEach((v, k) => { headers[k] = v; });
-      } else if (Array.isArray(init.headers)) {
-        init.headers.forEach(([k, v]) => { headers[k] = v; });
-      } else {
-        Object.assign(headers, init.headers);
-      }
+      new Headers(init.headers).forEach((value, key) => {
+        headers[key] = value;
+      });
     }
   }
 
+  return performNativeRequest(url, method, headers, body, 0);
+}
+
+async function performNativeRequest(
+  url: string,
+  method: string,
+  headers: Record<string, string>,
+  body: RequestInit["body"],
+  redirectCount: number,
+): Promise<Response> {
   const parsedUrl = new URL(url);
   const isHttps = parsedUrl.protocol === "https:";
   const transport = isHttps ? https : http;
+  const reqBody =
+    body === undefined || body === null ? undefined : await bodyToBuffer(body);
+  const requestHeaders = { ...headers };
 
-  let reqBody: Buffer | undefined;
-  if (body) {
-    reqBody = await bodyToBuffer(body);
+  if (reqBody && !hasHeader(requestHeaders, "content-length")) {
+    requestHeaders["Content-Length"] = String(reqBody.byteLength);
   }
 
   return new Promise((resolve, reject) => {
@@ -91,32 +103,73 @@ async function nativeFetch(
         port: parsedUrl.port || (isHttps ? 443 : 80),
         path: parsedUrl.pathname + parsedUrl.search,
         method,
-        headers,
+        headers: requestHeaders,
         timeout: 30000,
       },
       (res) => {
-        const respHeaders = new Headers();
-        for (const [k, v] of Object.entries(res.headers)) {
-          if (v) respHeaders.set(k, Array.isArray(v) ? v.join(", ") : v);
+        const status = res.statusCode || 500;
+        const location = res.headers.location;
+
+        if (location && [301, 302, 303, 307, 308].includes(status)) {
+          res.resume();
+
+          if (redirectCount >= 5) {
+            reject(new Error("请求重定向次数过多"));
+            return;
+          }
+
+          const redirectUrl = new URL(location, parsedUrl).href;
+          const switchToGet =
+            status === 303 ||
+            ((status === 301 || status === 302) &&
+              method.toUpperCase() === "POST");
+          const redirectHeaders = { ...requestHeaders };
+
+          if (switchToGet) {
+            deleteHeader(redirectHeaders, "content-length");
+            deleteHeader(redirectHeaders, "content-type");
+          }
+
+          void performNativeRequest(
+            redirectUrl,
+            switchToGet ? "GET" : method,
+            redirectHeaders,
+            switchToGet ? undefined : body,
+            redirectCount + 1,
+          ).then(resolve, reject);
+          return;
         }
 
-        const respBody = new ReadableStream({
-          start(controller) {
-            res.on("data", (chunk: Buffer) => {
-              controller.enqueue(new Uint8Array(chunk));
-            });
-            res.on("end", () => controller.close());
-            res.on("error", (err) => controller.error(err));
-          },
-        });
+        const responseHeaders = new Headers();
+        for (const [key, value] of Object.entries(res.headers)) {
+          if (value) {
+            responseHeaders.set(
+              key,
+              Array.isArray(value) ? value.join(", ") : value,
+            );
+          }
+        }
 
-        resolve(
-          new Response(respBody, {
-            status: res.statusCode || 500,
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk: Buffer) => chunks.push(chunk));
+        res.on("error", reject);
+        res.on("end", () => {
+          const payload = Buffer.concat(chunks);
+          const responseBody =
+            method.toUpperCase() === "HEAD" || [204, 205, 304].includes(status)
+              ? null
+              : (payload.buffer.slice(
+                  payload.byteOffset,
+                  payload.byteOffset + payload.byteLength,
+                ) as ArrayBuffer);
+          const response = new Response(responseBody, {
+            status,
             statusText: res.statusMessage || "",
-            headers: respHeaders,
-          }),
-        );
+            headers: responseHeaders,
+          });
+          Object.defineProperty(response, "url", { value: url });
+          resolve(response);
+        });
       },
     );
 
@@ -125,18 +178,23 @@ async function nativeFetch(
       req.destroy();
       reject(new Error("请求超时"));
     });
-
-    if (reqBody) {
-      req.end(reqBody);
-    } else {
-      req.end();
-    }
+    req.end(reqBody);
   });
 }
 
-/**
- * 获取或创建共享的 Innertube 实例。
- */
+function hasHeader(headers: Record<string, string>, name: string): boolean {
+  const target = name.toLowerCase();
+  return Object.keys(headers).some((key) => key.toLowerCase() === target);
+}
+
+function deleteHeader(headers: Record<string, string>, name: string): void {
+  const target = name.toLowerCase();
+  for (const key of Object.keys(headers)) {
+    if (key.toLowerCase() === target) delete headers[key];
+  }
+}
+
+/** 获取或创建共享的 Innertube 实例。 */
 export async function getInnertube(): Promise<Innertube> {
   if (!instance) {
     instance = await Innertube.create({
@@ -154,20 +212,20 @@ export interface YouTubeOEmbedInfo {
   thumbnail_url: string;
 }
 
-export async function getYouTubeOEmbedInfo(videoId: string): Promise<YouTubeOEmbedInfo> {
+export async function getYouTubeOEmbedInfo(
+  videoId: string,
+): Promise<YouTubeOEmbedInfo> {
   const endpoint = new URL("https://www.youtube.com/oembed");
   endpoint.searchParams.set("url", `https://www.youtube.com/watch?v=${videoId}`);
   endpoint.searchParams.set("format", "json");
   const response = await nativeFetch(endpoint);
   if (!response.ok) {
-    throw new Error("\u65e0\u6cd5\u83b7\u53d6\u89c6\u9891\u57fa\u7840\u4fe1\u606f");
+    throw new Error("无法获取视频基础信息");
   }
   return response.json() as Promise<YouTubeOEmbedInfo>;
 }
 
-/**
- * 从 YouTube 视频链接中提取 videoId。
- */
+/** 从 YouTube 视频链接中提取 videoId。 */
 export function extractVideoId(url: string): string | null {
   try {
     const parsed = new URL(url);
@@ -180,8 +238,8 @@ export function extractVideoId(url: string): string | null {
       parsed.hostname.includes("youtube.com") ||
       parsed.hostname.includes("youtube-nocookie.com")
     ) {
-      const v = parsed.searchParams.get("v");
-      if (v) return v;
+      const videoId = parsed.searchParams.get("v");
+      if (videoId) return videoId;
 
       const pathMatch = parsed.pathname.match(
         /^\/(embed|shorts|v)\/([a-zA-Z0-9_-]{11})/,
@@ -189,7 +247,7 @@ export function extractVideoId(url: string): string | null {
       if (pathMatch) return pathMatch[2];
     }
   } catch {
-    // 无效 URL，忽略
+    // 无效 URL，直接返回空值。
   }
 
   return null;
