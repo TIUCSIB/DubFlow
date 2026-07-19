@@ -1,3 +1,4 @@
+import { parseMimoChatResponse } from "@/lib/mimo-response";
 const MIMO_API_BASE = "https://api.xiaomimimo.com/v1";
 
 async function getApiKey(requestApiKey?: string): Promise<string> {
@@ -62,8 +63,13 @@ export async function speechRecognition(
     throw new Error(`ASR 请求失败 (${res.status}): ${err}`);
   }
 
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content ?? "";
+  const rawResponse = await res.text();
+  const data = parseMimoChatResponse(rawResponse);
+  const content = data.choices?.[0]?.message?.content;
+  if (typeof content !== "string") {
+    throw new Error("ASR 服务没有返回有效的识别文本");
+  }
+  return content;
 }
 
 export async function synthesizeSpeech(
