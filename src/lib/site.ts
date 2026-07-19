@@ -1,0 +1,8 @@
+export const SITE_NAME = "DubFlow";
+export const SITE_URL = "https://dubflow-app.vercel.app";
+export const SITE_TITLE =
+  "DubFlow - YouTube \u667a\u80fd\u5b57\u5e55\u4e0e\u4e2d\u6587\u914d\u97f3\u5de5\u4f5c\u53f0";
+export const SITE_DESCRIPTION =
+  "\u9762\u5411 YouTube \u89c6\u9891\u7684\u667a\u80fd\u5b57\u5e55\u4e0e\u4e2d\u6587\u914d\u97f3\u5de5\u4f5c\u53f0\uff0c\u652f\u6301\u89c6\u9891\u89e3\u6790\u3001\u5b57\u5e55\u63d0\u53d6\u3001\u81ea\u52a8\u7ffb\u8bd1\u3001\u5b57\u5e55\u7f16\u8f91\u3001\u8bed\u97f3\u5408\u6210\u548c\u58f0\u97f3\u514b\u9686\u3002";
+
+export const SITE_LOCALE = "zh_CN";
