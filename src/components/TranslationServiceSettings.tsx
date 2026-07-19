@@ -54,10 +54,10 @@ export default function TranslationServiceSettings({
       </ToggleButtonGroup>
 
       {provider === "deepl" && (
-        <div className="flex items-center gap-3">
+        <div className="grid min-w-0 gap-2 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center sm:gap-3">
           <label
             htmlFor="deepl-api-key"
-            className="shrink-0 text-sm font-medium text-gray-700 dark:text-gray-300"
+            className="text-sm font-medium text-gray-700 dark:text-gray-300"
           >
             DeepL API Key
           </label>
@@ -66,8 +66,10 @@ export default function TranslationServiceSettings({
             aria-label="DeepL API Key"
             type="password"
             placeholder="输入你的 DeepL Free API Key"
+            fullWidth
             value={deeplApiKey}
             onChange={(event) => onDeepLApiKeyChange(event.target.value)}
+            className="block min-w-0 max-w-full"
           />
         </div>
       )}

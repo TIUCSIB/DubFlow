@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Modal, Button, Input, toast } from "@heroui/react";
+import { Modal, Button, Input, InputGroup, toast } from "@heroui/react";
 import {
   Check,
   Eye,
@@ -200,7 +200,7 @@ export default function SettingsModal({
                   />
                 )}
 
-                <div className="space-y-3 rounded-lg border border-dashed border-gray-300 p-4 dark:border-gray-700">
+                <div className="min-w-0 space-y-3 rounded-lg border border-dashed border-gray-300 p-4 dark:border-gray-700">
                   <div className="flex items-center gap-2">
                     <Plus className="h-4 w-4 text-teal-500" />
                     <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -208,10 +208,10 @@ export default function SettingsModal({
                     </h3>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="grid min-w-0 gap-2 sm:grid-cols-[4rem_minmax(0,1fr)] sm:items-center sm:gap-3">
                     <label
                       htmlFor="settings-label"
-                      className="shrink-0 text-sm font-medium text-gray-700 dark:text-gray-300"
+                      className="text-sm font-medium text-gray-700 dark:text-gray-300"
                     >
                       备注
                     </label>
@@ -219,23 +219,25 @@ export default function SettingsModal({
                       id="settings-label"
                       aria-label="备注"
                       placeholder="例如：主账号、测试账号"
+                      fullWidth
                       value={label}
                       onChange={(event) => {
                         setLabel(event.target.value);
                         setStatus("idle");
                       }}
+                      className="block min-w-0 max-w-full"
                     />
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="grid min-w-0 gap-2 sm:grid-cols-[4rem_minmax(0,1fr)] sm:items-center sm:gap-3">
                     <label
                       htmlFor="settings-api-key"
-                      className="shrink-0 text-sm font-medium text-gray-700 dark:text-gray-300"
+                      className="text-sm font-medium text-gray-700 dark:text-gray-300"
                     >
                       API Key
                     </label>
-                    <div className="relative min-w-0 flex-1">
-                      <Input
+                    <InputGroup fullWidth className="min-w-0 max-w-full">
+                      <InputGroup.Input
                         id="settings-api-key"
                         aria-label="MiMo API Key"
                         type={showApiKey ? "text" : "password"}
@@ -245,23 +247,29 @@ export default function SettingsModal({
                           setApiKey(event.target.value);
                           setStatus("idle");
                         }}
-                        className="pr-10"
+                        className="min-w-0"
                       />
-                      <button
-                        type="button"
-                        onClick={() => setShowApiKey((current) => !current)}
-                        aria-label={
-                          showApiKey ? "隐藏 API Key" : "查看 API Key"
-                        }
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                      >
-                        {showApiKey ? (
-                          <EyeOff className="h-4 w-4" />
-                        ) : (
-                          <Eye className="h-4 w-4" />
-                        )}
-                      </button>
-                    </div>
+                      <InputGroup.Suffix className="shrink-0 px-1">
+                        <Button
+                          isIconOnly
+                          size="sm"
+                          variant="ghost"
+                          onPress={() =>
+                            setShowApiKey((current) => !current)
+                          }
+                          aria-label={
+                            showApiKey ? "隐藏 API Key" : "查看 API Key"
+                          }
+                          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                        >
+                          {showApiKey ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </InputGroup.Suffix>
+                    </InputGroup>
                   </div>
                 </div>
 
