@@ -1,0 +1,12 @@
+.git
+.github
+.next
+.vercel
+.env*
+.heroui-docs
+node_modules
+npm-debug.log*
+*.tsbuildinfo
+17843*-player-script.js
+test_download.mjs
+coverage
